@@ -29,36 +29,31 @@ def get_japanese_font(size):
                 continue
     return ImageFont.load_default()
 
-# APIキー設定
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 uploaded_file = st.file_uploader("📷 写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
 def detect_face_center(pil_img):
-    """OpenCVを使用して画像から顔を中心座標(x, y)として検出する"""
+    """OpenCVで顔を検出し、その中心Y座標率(0.0〜1.0)を返す"""
     try:
         cv_img = np.array(pil_img)
         gray = cv2.cvtColor(cv_img, cv2.COLOR_RGB2GRAY)
         
-        # 顔検出分類器
         cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         face_cascade = cv2.CascadeClassifier(cascade_path)
         
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
         
         if len(faces) > 0:
-            # 最も大きい顔を選択
             largest_face = max(faces, key=lambda b: b[2] * b[3])
             x, y, w, h = largest_face
-            # 顔の中心座標（目元あたりを狙うためやや上部）
-            center_x = x + w / 2.0
-            center_y = y + h * 0.4
-            return center_x, center_y
+            # 顔の目元付近（上から約35%）の位置
+            eye_y = y + (h * 0.35)
+            return eye_y / float(pil_img.height)
     except Exception:
         pass
         
-    # 検出できなかった場合は画像の中央
-    return pil_img.width / 2.0, pil_img.height / 2.0
+    return 0.4  # 検出できなかった場合は画像の上から40%の位置をデフォルトにする
 
 def analyze_image_with_gemini(pil_image, api_key_val):
     default_data = {
@@ -120,24 +115,23 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         
     return default_data
 
-def crop_image_centered(img, center_x, center_y, target_w, target_h, y_offset_pct=0):
-    """指定された中心座標と手動オフセットでクロップする"""
+def crop_image(img, target_w, target_h, base_y_ratio, offset_pct):
+    """指定された高さ割合とオフセットでトリミング"""
     u_w, u_h = img.size
     
-    # 手動オフセットの反映 (-50% ～ +50%)
-    center_y += (u_h * (y_offset_pct / 100.0))
-
-    scale = max(target_w / u_w, target_h / u_h)
-    
+    scale = max(target_w / float(u_w), target_h / float(u_h))
     new_w = int(u_w * scale)
     new_h = int(u_h * scale)
     resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
     
-    scaled_center_x = center_x * scale
-    scaled_center_y = center_y * scale
+    # スライダー（-100〜+100）を反転・調整して感覚に合わせる
+    adjusted_ratio = base_y_ratio + (offset_pct / 100.0)
+    adjusted_ratio = max(0.0, min(1.0, adjusted_ratio))
     
-    crop_x1 = scaled_center_x - (target_w / 2.0)
-    crop_y1 = scaled_center_y - (target_h / 2.0)
+    center_y = new_h * adjusted_ratio
+    
+    crop_x1 = (new_w - target_w) / 2.0
+    crop_y1 = center_y - (target_h / 2.0)
     
     crop_x1 = max(0, min(crop_x1, new_w - target_w))
     crop_y1 = max(0, min(crop_y1, new_h - target_h))
@@ -147,7 +141,7 @@ def crop_image_centered(img, center_x, center_y, target_w, target_h, y_offset_pc
     
     return resized_img.crop((int(crop_x1), int(crop_y1), int(crop_x2), int(crop_y2)))
 
-def generate_card(user_img, card_data, center_x, center_y, y_offset):
+def generate_card(user_img, card_data, base_y_ratio, y_offset):
     card_w, card_h = 750, 1050
     card = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
     draw = ImageDraw.Draw(card)
@@ -194,7 +188,7 @@ def generate_card(user_img, card_data, center_x, center_y, y_offset):
     draw.ellipse([(645, 52), (695, 102)], fill=style["accent"], outline="#FFFFFF", width=2)
     draw.text((656, 58), style["symbol"], fill="#FFFFFF", font=font_hp_label)
 
-    # 4. メイン写真領域（顔中心クロップ適用）
+    # 4. メイン写真領域
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
     img_x1, img_y1, img_x2, img_y2 = 45, 130, card_w-45, 570
@@ -203,13 +197,13 @@ def generate_card(user_img, card_data, center_x, center_y, y_offset):
     draw.rectangle([(img_x1-5, img_y1-5), (img_x2+5, img_y2+5)], fill="#B7950B")
     draw.rectangle([(img_x1, img_y1), (img_x2, img_y2)], fill="#000000")
 
-    cropped_img = crop_image_centered(user_img_fixed, center_x, center_y, img_w, img_h, y_offset)
+    cropped_img = crop_image(user_img_fixed, img_w, img_h, base_y_ratio, y_offset)
 
     card.paste(cropped_img, (img_x1, img_y1))
 
     # 5. サブ情報バー
     draw.rectangle([(50, 580), (card_w-50, 615)], fill="#FFFFFF", outline="#B7950B", width=2)
-    draw.text((65, 586), "たねTogomon  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
+    draw.text((65, 586), "たねTogomon  /  全国図鑑 NO.001  /  たかさ: 1.0m  おmoさ: 15.0kg", fill="#555555", font=font_footer)
 
     # 6. ワザ表示エリア
     draw.rectangle([(45, 630), (card_w-45, 890)], fill="#FFFFFF", outline=style["bg"], width=3)
@@ -245,17 +239,18 @@ if uploaded_file is not None:
     user_img = Image.open(uploaded_file).convert("RGB")
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
-    # 自動顔検出
-    center_x, center_y = detect_face_center(user_img_fixed)
+    # 顔の位置基準を取得
+    base_y_ratio = detect_face_center(user_img_fixed)
 
     with st.spinner("🎴 Togomonカードを作成中..."):
         card_data = analyze_image_with_gemini(user_img_fixed, api_key)
 
     with col2:
         st.subheader("⚙️ 写真の位置調整")
-        y_offset = st.slider("↕️ 写真を上下に調整", min_value=-50, max_value=50, value=0, help="顔が枠の中心に来るようにスライダーで微調整できます")
+        # 調整幅を-100から+100に拡大
+        y_offset = st.slider("↕️ 写真の位置を上下に微調整", min_value=-100, max_value=100, value=0, help="顔・目が中央に来るようにスライダーを動かしてください")
 
-    card_img = generate_card(user_img_fixed, card_data, center_x, center_y, y_offset)
+    card_img = generate_card(user_img_fixed, card_data, base_y_ratio, y_offset)
 
     with col1:
         st.image(card_img, use_container_width=True)
