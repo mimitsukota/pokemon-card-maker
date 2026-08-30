@@ -68,7 +68,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         "type": "超",
         "skill_name": "へんしんアタック",
         "damage": "60",
-        "desc": "カメラを つけると げんきいっぱいに あらわれる ふしぎな モンスター！"
+        "desc": "いつものにこやかな 表情の うらには\nすさまじい 集中力と 技が ひめられている。\nとくいわざの くりだしは とても すばやい。\nであうと みんなが 笑顔に なってしまうぞ！"
     }
 
     if not api_key_val:
@@ -78,16 +78,16 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         genai.configure(api_key=api_key_val)
         
         prompt = """
-        添付された画像を深く分析して、この写真にぴったりのTogoMoNカード用テキストを作成してください。
+        添付された画像を深く分析して、この写真の人物や対象の特徴・性格・得意技の秘訣などを盛り込んだTogoMoNカード用テキストを作成してください。
         以下のJSON形式のみを出力してください。
 
         {
-          "card_name": "写真に写っている人物や物・表情の特徴を表した面白い名前（8文字以内）",
+          "card_name": "写真の特徴を表した面白い名前（8文字以内）",
           "hp": "100〜200の数値",
           "type": "草/炎/水/雷/超/闘 のどれかひとつ",
           "skill_name": "写真のポーズや雰囲気に関連したワザ名（8文字以内）",
           "damage": "30〜120の数値",
-          "desc": "写真の状況やキャラクター性を表す2行程度の面白い説明文（40文字程度）"
+          "desc": "写真の特徴や得意技の凄さを表す詳しい解説文（改行コード\\nを使ってちょうど4行になるように作成してください。1行あたり18〜22文字程度。）"
         }
         """
         
@@ -206,16 +206,14 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     font_hp_val = get_japanese_font(32)
     font_skill = get_japanese_font(26)
     font_dmg = get_japanese_font(32)
-    font_desc = get_japanese_font(20)
+    font_desc = get_japanese_font(18) # 4行収めるためフォントサイズ調整
     font_footer = get_japanese_font(16)
 
-    # 名前の文字数調整（長すぎる場合は省略）
     c_name = str(card_data.get("card_name", "おもしろモンスター"))
     if len(c_name) > 10:
         c_name = c_name[:9] + "…"
     draw.text((70, 75), c_name, fill="#FFFFFF", font=font_name)
     
-    # HPと属性の配置（枠内にしっかり収まる位置）
     draw.text((455, 82), "HP", fill="#FFEB3B", font=font_hp_label)
     draw.text((485, 70), str(card_data.get("hp", "120")), fill="#FFFFFF", font=font_hp_val)
     
@@ -225,7 +223,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     # 4. メイン写真領域
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
-    img_x1, img_y1, img_x2, img_y2 = 60, 138, card_w-60, 565
+    img_x1, img_y1, img_x2, img_y2 = 60, 138, card_w-60, 550 # 高さを微調整して説明エリアを拡大
     img_w, img_h = img_x2 - img_x1, img_y2 - img_y1
     
     draw.rectangle([(img_x1-4, img_y1-4), (img_x2+4, img_y2+4)], fill="#B7950B")
@@ -235,32 +233,35 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     card.paste(cropped_img, (img_x1, img_y1))
 
     # 5. サブ情報バー
-    draw.rectangle([(62, 575), (card_w-62, 608)], fill="#FFFFFF", outline="#B7950B", width=2)
-    draw.text((72, 582), "たねTogoMoN  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
+    draw.rectangle([(62, 560), (card_w-62, 592)], fill="#FFFFFF", outline="#B7950B", width=2)
+    draw.text((72, 567), "たねTogoMoN  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
 
-    # 6. ワザ表示エリア
-    draw.rectangle([(60, 620), (card_w-60, 880)], fill="#FFFFFF", outline=style["bg"], width=3)
+    # 6. ワザ・説明エリア
+    draw.rectangle([(60, 605), (card_w-60, 882)], fill="#FFFFFF", outline=style["bg"], width=3)
 
     # ワザシンボル
-    draw.ellipse([(75, 642), (110, 677)], fill=style["bg"])
-    draw.ellipse([(118, 642), (153, 677)], fill=style["accent"])
+    draw.ellipse([(75, 620), (110, 655)], fill=style["bg"])
+    draw.ellipse([(118, 620), (153, 655)], fill=style["accent"])
     
     s_name = str(card_data.get("skill_name", "へんしんアタック"))
     if len(s_name) > 10:
         s_name = s_name[:9] + "…"
-    draw.text((165, 644), s_name, fill="#111111", font=font_skill)
-    draw.text((card_w - 120, 640), str(card_data.get("damage", "60")), fill="#111111", font=font_dmg)
+    draw.text((165, 622), s_name, fill="#111111", font=font_skill)
+    draw.text((card_w - 120, 618), str(card_data.get("damage", "60")), fill="#111111", font=font_dmg)
 
-    # 説明文の自動折り返し処理（はみ出し防止）
+    # 区切り線
+    draw.line([(75, 670), (card_w-75, 670)], fill="#EEEEEE", width=2)
+
+    # 4行説明文の自動整列描画
     raw_desc = str(card_data.get("desc", "")).replace("\\n", "\n")
     lines = []
     for paragraph in raw_desc.split("\n"):
-        lines.extend(textwrap.wrap(paragraph, width=22))
+        lines.extend(textwrap.wrap(paragraph, width=24))
     
-    y_off = 705
-    for l in lines[:4]: # 最大4行まで
+    y_off = 685
+    for l in lines[:4]: # きっちり4行分表示
         draw.text((75, y_off), l, fill="#333333", font=font_desc)
-        y_off += 34
+        y_off += 30
 
     # 7. フッター
     draw.rectangle([(60, 890), (card_w-60, 975)], fill="#F4F4F4", outline="#CCCCCC", width=2)
