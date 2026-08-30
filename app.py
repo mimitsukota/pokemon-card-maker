@@ -2,6 +2,7 @@ import io
 import os
 import json
 import random
+import textwrap
 import numpy as np
 import cv2
 import streamlit as st
@@ -81,12 +82,12 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         以下のJSON形式のみを出力してください。
 
         {
-          "card_name": "写真に写っている人物や物・表情の特徴を表した面白い名前（10文字以内）",
+          "card_name": "写真に写っている人物や物・表情の特徴を表した面白い名前（8文字以内）",
           "hp": "100〜200の数値",
           "type": "草/炎/水/雷/超/闘 のどれかひとつ",
-          "skill_name": "写真のポーズや雰囲気に関連したワザ名（10文字以内）",
+          "skill_name": "写真のポーズや雰囲気に関連したワザ名（8文字以内）",
           "damage": "30〜120の数値",
-          "desc": "写真の状況やキャラクター性を表す2行程度の面白い説明文"
+          "desc": "写真の状況やキャラクター性を表す2行程度の面白い説明文（40文字程度）"
         }
         """
         
@@ -173,22 +174,22 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
             break
     style = type_styles[t_key]
 
-    # 1. 太枠・ハデハデ金ピカ外枠
-    border_margin = 52
+    # 1. ハデハデ外枠
+    border_margin = 48
     
     draw.rectangle([(0, 0), (card_w, card_h)], fill="#FFD700")
-    draw.rectangle([(10, 10), (card_w-10, card_h-10)], fill="#FFF066")
-    draw.rectangle([(20, 20), (card_w-20, card_h-20)], fill="#DAA520")
-    draw.rectangle([(32, 32), (card_w-32, card_h-32)], fill="#FF8C00")
-    draw.rectangle([(42, 42), (card_w-42, card_h-42)], fill="#B8860B")
+    draw.rectangle([(8, 8), (card_w-8, card_h-8)], fill="#FFF066")
+    draw.rectangle([(18, 18), (card_w-18, card_h-18)], fill="#DAA520")
+    draw.rectangle([(28, 28), (card_w-28, card_h-28)], fill="#FF8C00")
+    draw.rectangle([(38, 38), (card_w-38, card_h-38)], fill="#B8860B")
 
     random.seed(42)
     star_colors = ["#FFFFFF", "#FFFF99", "#FFE066", "#FFD700", "#FF69B4", "#00FFFF"]
-    for _ in range(600):
+    for _ in range(500):
         sx = random.randint(0, card_w)
         sy = random.randint(0, card_h)
         if sx < border_margin or sx > card_w - border_margin or sy < border_margin or sy > card_h - border_margin:
-            ssize = random.randint(4, 14)
+            ssize = random.randint(4, 12)
             scolor = random.choice(star_colors)
             draw_star(draw, sx, sy, ssize, scolor)
 
@@ -196,79 +197,91 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     draw.rectangle([(border_margin, border_margin), (card_w-border_margin, card_h-border_margin)], fill=style["card_bg"])
 
     # 3. ヘッダー帯
-    draw.rectangle([(62, 65), (card_w-62, 130)], fill=style["bg"])
+    header_x1, header_y1 = 58, 60
+    header_x2, header_y2 = card_w - 58, 125
+    draw.rectangle([(header_x1, header_y1), (header_x2, header_y2)], fill=style["bg"])
     
-    font_name = get_japanese_font(34)
-    font_hp_label = get_japanese_font(20)
-    font_hp_val = get_japanese_font(38)
-    font_skill = get_japanese_font(30)
-    font_dmg = get_japanese_font(36)
-    font_desc = get_japanese_font(22)
-    font_footer = get_japanese_font(18)
+    font_name = get_japanese_font(30)
+    font_hp_label = get_japanese_font(18)
+    font_hp_val = get_japanese_font(32)
+    font_skill = get_japanese_font(26)
+    font_dmg = get_japanese_font(32)
+    font_desc = get_japanese_font(20)
+    font_footer = get_japanese_font(16)
 
-    draw.text((75, 76), str(card_data.get("card_name", "おもしろモンスター")), fill="#FFFFFF", font=font_name)
+    # 名前の文字数調整（長すぎる場合は省略）
+    c_name = str(card_data.get("card_name", "おもしろモンスター"))
+    if len(c_name) > 10:
+        c_name = c_name[:9] + "…"
+    draw.text((70, 75), c_name, fill="#FFFFFF", font=font_name)
     
-    draw.text((475, 83), "HP", fill="#FFEB3B", font=font_hp_label)
-    draw.text((510, 67), str(card_data.get("hp", "120")), fill="#FFFFFF", font=font_hp_val)
+    # HPと属性の配置（枠内にしっかり収まる位置）
+    draw.text((455, 82), "HP", fill="#FFEB3B", font=font_hp_label)
+    draw.text((485, 70), str(card_data.get("hp", "120")), fill="#FFFFFF", font=font_hp_val)
     
-    draw.ellipse([(625, 67), (675, 117)], fill=style["accent"], outline="#FFFFFF", width=2)
-    draw.text((636, 73), style["symbol"], fill="#FFFFFF", font=font_hp_label)
+    draw.ellipse([(625-72, 68), (670-72, 113)], fill=style["accent"], outline="#FFFFFF", width=2)
+    draw.text((634-72, 75), style["symbol"], fill="#FFFFFF", font=font_hp_label)
 
     # 4. メイン写真領域
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
-    img_x1, img_y1, img_x2, img_y2 = 65, 145, card_w-65, 570
+    img_x1, img_y1, img_x2, img_y2 = 60, 138, card_w-60, 565
     img_w, img_h = img_x2 - img_x1, img_y2 - img_y1
     
-    draw.rectangle([(img_x1-5, img_y1-5), (img_x2+5, img_y2+5)], fill="#B7950B")
+    draw.rectangle([(img_x1-4, img_y1-4), (img_x2+4, img_y2+4)], fill="#B7950B")
     draw.rectangle([(img_x1, img_y1), (img_x2, img_y2)], fill="#000000")
 
     cropped_img = crop_image(user_img_fixed, img_w, img_h, base_y_ratio, y_offset)
-
     card.paste(cropped_img, (img_x1, img_y1))
 
     # 5. サブ情報バー
-    draw.rectangle([(68, 580), (card_w-68, 615)], fill="#FFFFFF", outline="#B7950B", width=2)
-    draw.text((80, 586), "たねTogoMoN  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
+    draw.rectangle([(62, 575), (card_w-62, 608)], fill="#FFFFFF", outline="#B7950B", width=2)
+    draw.text((72, 582), "たねTogoMoN  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
 
     # 6. ワザ表示エリア
-    draw.rectangle([(65, 630), (card_w-65, 880)], fill="#FFFFFF", outline=style["bg"], width=3)
+    draw.rectangle([(60, 620), (card_w-60, 880)], fill="#FFFFFF", outline=style["bg"], width=3)
 
-    draw.ellipse([(85, 655), (125, 695)], fill=style["bg"])
-    draw.ellipse([(135, 655), (175, 695)], fill=style["accent"])
+    # ワザシンボル
+    draw.ellipse([(75, 642), (110, 677)], fill=style["bg"])
+    draw.ellipse([(118, 642), (153, 677)], fill=style["accent"])
     
-    draw.text((195, 657), str(card_data.get("skill_name", "へんしんアタック")), fill="#111111", font=font_skill)
-    draw.text((580, 653), str(card_data.get("damage", "60")), fill="#111111", font=font_dmg)
+    s_name = str(card_data.get("skill_name", "へんしんアタック"))
+    if len(s_name) > 10:
+        s_name = s_name[:9] + "…"
+    draw.text((165, 644), s_name, fill="#111111", font=font_skill)
+    draw.text((card_w - 120, 640), str(card_data.get("damage", "60")), fill="#111111", font=font_dmg)
 
-    desc_text = str(card_data.get("desc", "")).replace("\\n", "\n")
-    lines = desc_text.split("\n")
-    y_off = 725
-    for l in lines:
-        draw.text((90, y_off), l, fill="#333333", font=font_desc)
-        y_off += 38
+    # 説明文の自動折り返し処理（はみ出し防止）
+    raw_desc = str(card_data.get("desc", "")).replace("\\n", "\n")
+    lines = []
+    for paragraph in raw_desc.split("\n"):
+        lines.extend(textwrap.wrap(paragraph, width=22))
+    
+    y_off = 705
+    for l in lines[:4]: # 最大4行まで
+        draw.text((75, y_off), l, fill="#333333", font=font_desc)
+        y_off += 34
 
     # 7. フッター
-    draw.rectangle([(65, 890), (card_w-65, 975)], fill="#F4F4F4", outline="#CCCCCC", width=2)
+    draw.rectangle([(60, 890), (card_w-60, 975)], fill="#F4F4F4", outline="#CCCCCC", width=2)
 
-    draw.text((80, 905), "弱点 : 悪 ×2", fill="#333333", font=font_footer)
-    draw.text((270, 905), "抵抗力 : -30", fill="#333333", font=font_footer)
-    draw.text((460, 905), "にげる : ●●", fill="#333333", font=font_footer)
+    draw.text((75, 905), "弱点 : 悪 ×2", fill="#333333", font=font_footer)
+    draw.text((250, 905), "抵抗力 : -30", fill="#333333", font=font_footer)
+    draw.text((430, 905), "にげる : ●●", fill="#333333", font=font_footer)
 
-    draw.text((80, 940), "Illus. TogoMoN Maker", fill="#777777", font=font_footer)
-    draw.text((560, 940), "001/050 RR ★", fill="#111111", font=font_footer)
+    draw.text((75, 940), "Illus. TogoMoN Maker", fill="#777777", font=font_footer)
+    draw.text((520, 940), "001/050 RR ★", fill="#111111", font=font_footer)
 
     return card.convert("RGB")
 
 col1, col2 = st.columns([1, 1])
 
 if uploaded_file is not None:
-    # 画像ファイル自体が変わったことを識別するためのキー
     file_id = f"{uploaded_file.name}_{uploaded_file.size}"
     
     user_img = Image.open(uploaded_file).convert("RGB")
     user_img_fixed = ImageOps.exif_transpose(user_img)
 
-    # 新しい画像がアップロードされた場合、AI解析を強制的に実行
     if "last_file_id" not in st.session_state or st.session_state["last_file_id"] != file_id:
         st.session_state["last_file_id"] = file_id
         st.session_state["base_y_ratio"] = detect_face_center(user_img_fixed)
