@@ -41,7 +41,6 @@ api_key = st.secrets.get("GEMINI_API_KEY", "")
 uploaded_file = st.file_uploader("📷 写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
 def detect_face_center(pil_img):
-    """OpenCVで顔を検出し、その中心Y座標率(0.0〜1.0)を返す"""
     try:
         cv_img = np.array(pil_img)
         gray = cv2.cvtColor(cv_img, cv2.COLOR_RGB2GRAY)
@@ -122,7 +121,6 @@ def analyze_image_with_gemini(pil_image, api_key_val):
     return default_data
 
 def crop_image(img, target_w, target_h, base_y_ratio, offset_pct):
-    """指定された高さ割合とオフセットでトリミング"""
     u_w, u_h = img.size
     
     scale = max(target_w / float(u_w), target_h / float(u_h))
@@ -147,7 +145,6 @@ def crop_image(img, target_w, target_h, base_y_ratio, offset_pct):
     return resized_img.crop((int(crop_x1), int(crop_y1), int(crop_x2), int(crop_y2)))
 
 def draw_star(draw, cx, cy, size, fill_color):
-    """描画用：指定位置に星を描画する補助関数"""
     points = []
     for i in range(10):
         r = size if i % 2 == 0 else size / 2.0
@@ -178,28 +175,32 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
             break
     style = type_styles[t_key]
 
-    # 1. 豪華な旧裏キラ風ゴールド外枠の描画
-    draw.rectangle([(0, 0), (card_w, card_h)], fill="#C59B27") # ゴールドベース
-    draw.rectangle([(8, 8), (card_w-8, card_h-8)], fill="#E5C158")
-    draw.rectangle([(16, 16), (card_w-16, card_h-16)], fill="#9A7B1C")
+    # 1. 2倍太枠＆超ハデハデ金ピカキラキラ外枠
+    border_margin = 52 # 枠の幅を従来の2倍（52px）に拡大
+    
+    draw.rectangle([(0, 0), (card_w, card_h)], fill="#FFD700") # ド派手なゴールド
+    draw.rectangle([(10, 10), (card_w-10, card_h-10)], fill="#FFF066")
+    draw.rectangle([(20, 20), (card_w-20, card_h-20)], fill="#DAA520")
+    draw.rectangle([(32, 32), (card_w-32, card_h-32)], fill="#FF8C00") # メタルアクセント
+    draw.rectangle([(42, 42), (card_w-42, card_h-42)], fill="#B8860B")
 
-    # 星模様（キラ加工）を外枠全体に散りばめる
-    random.seed(42) # 星の位置を固定して綺麗に配置
-    star_colors = ["#FFF8D6", "#FFE57F", "#FFFFFF", "#D4AF37"]
-    for _ in range(180):
+    # 太くなった外枠エリア全体に星（★）を大量（600個）に散りばめる
+    random.seed(42)
+    star_colors = ["#FFFFFF", "#FFFF99", "#FFE066", "#FFD700", "#FF69B4", "#00FFFF"]
+    for _ in range(600):
         sx = random.randint(0, card_w)
         sy = random.randint(0, card_h)
-        # 内側のカードエリア（26, 26 〜）を除いた枠部分だけに星を描画
-        if sx < 26 or sx > card_w - 26 or sy < 26 or sy > card_h - 26:
-            ssize = random.randint(3, 8)
+        # 内側カード領域（52px〜）の外側にだけ星を描画
+        if sx < border_margin or sx > card_w - border_margin or sy < border_margin or sy > card_h - border_margin:
+            ssize = random.randint(4, 14) # 星のサイズも大きく拡大！
             scolor = random.choice(star_colors)
             draw_star(draw, sx, sy, ssize, scolor)
 
-    # 2. カード本体ベース背景
-    draw.rectangle([(26, 26), (card_w-26, card_h-26)], fill=style["card_bg"])
+    # 2. 内側カード本体（太枠に合わせてレイアウトを微修正）
+    draw.rectangle([(border_margin, border_margin), (card_w-border_margin, card_h-border_margin)], fill=style["card_bg"])
 
     # 3. ヘッダー帯
-    draw.rectangle([(40, 42), (card_w-40, 115)], fill=style["bg"])
+    draw.rectangle([(62, 65), (card_w-62, 130)], fill=style["bg"])
     
     font_name = get_japanese_font(34)
     font_hp_label = get_japanese_font(20)
@@ -209,18 +210,18 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     font_desc = get_japanese_font(22)
     font_footer = get_japanese_font(18)
 
-    draw.text((55, 56), str(card_data.get("card_name", "めがねボーイ")), fill="#FFFFFF", font=font_name)
+    draw.text((75, 76), str(card_data.get("card_name", "めがねボーイ")), fill="#FFFFFF", font=font_name)
     
-    draw.text((490, 68), "HP", fill="#FFEB3B", font=font_hp_label)
-    draw.text((525, 52), str(card_data.get("hp", "120")), fill="#FFFFFF", font=font_hp_val)
+    draw.text((475, 83), "HP", fill="#FFEB3B", font=font_hp_label)
+    draw.text((510, 67), str(card_data.get("hp", "120")), fill="#FFFFFF", font=font_hp_val)
     
-    draw.ellipse([(645, 52), (695, 102)], fill=style["accent"], outline="#FFFFFF", width=2)
-    draw.text((656, 58), style["symbol"], fill="#FFFFFF", font=font_hp_label)
+    draw.ellipse([(625, 67), (675, 117)], fill=style["accent"], outline="#FFFFFF", width=2)
+    draw.text((636, 73), style["symbol"], fill="#FFFFFF", font=font_hp_label)
 
     # 4. メイン写真領域
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
-    img_x1, img_y1, img_x2, img_y2 = 45, 130, card_w-45, 570
+    img_x1, img_y1, img_x2, img_y2 = 65, 145, card_w-65, 570
     img_w, img_h = img_x2 - img_x1, img_y2 - img_y1
     
     draw.rectangle([(img_x1-5, img_y1-5), (img_x2+5, img_y2+5)], fill="#B7950B")
@@ -231,34 +232,34 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     card.paste(cropped_img, (img_x1, img_y1))
 
     # 5. サブ情報バー
-    draw.rectangle([(50, 580), (card_w-50, 615)], fill="#FFFFFF", outline="#B7950B", width=2)
-    draw.text((65, 586), "たねTogoMoN  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
+    draw.rectangle([(68, 580), (card_w-68, 615)], fill="#FFFFFF", outline="#B7950B", width=2)
+    draw.text((80, 586), "たねTogoMoN  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
 
     # 6. ワザ表示エリア
-    draw.rectangle([(45, 630), (card_w-45, 890)], fill="#FFFFFF", outline=style["bg"], width=3)
+    draw.rectangle([(65, 630), (card_w-65, 880)], fill="#FFFFFF", outline=style["bg"], width=3)
 
-    draw.ellipse([(65, 660), (105, 700)], fill=style["bg"])
-    draw.ellipse([(115, 660), (155, 700)], fill=style["accent"])
+    draw.ellipse([(85, 655), (125, 695)], fill=style["bg"])
+    draw.ellipse([(135, 655), (175, 695)], fill=style["accent"])
     
-    draw.text((175, 662), str(card_data.get("skill_name", "へんしんビーム")), fill="#111111", font=font_skill)
-    draw.text((600, 658), str(card_data.get("damage", "60")), fill="#111111", font=font_dmg)
+    draw.text((195, 657), str(card_data.get("skill_name", "へんしんビーム")), fill="#111111", font=font_skill)
+    draw.text((580, 653), str(card_data.get("damage", "60")), fill="#111111", font=font_dmg)
 
     desc_text = str(card_data.get("desc", "")).replace("\\n", "\n")
     lines = desc_text.split("\n")
-    y_off = 730
+    y_off = 725
     for l in lines:
-        draw.text((70, y_off), l, fill="#333333", font=font_desc)
+        draw.text((90, y_off), l, fill="#333333", font=font_desc)
         y_off += 38
 
     # 7. フッター
-    draw.rectangle([(45, 900), (card_w-45, 990)], fill="#F4F4F4", outline="#CCCCCC", width=2)
+    draw.rectangle([(65, 890), (card_w-65, 975)], fill="#F4F4F4", outline="#CCCCCC", width=2)
 
-    draw.text((65, 920), "弱点 : 悪 ×2", fill="#333333", font=font_footer)
-    draw.text((270, 920), "抵抗力 : -30", fill="#333333", font=font_footer)
-    draw.text((480, 920), "にげる : ●●", fill="#333333", font=font_footer)
+    draw.text((80, 905), "弱点 : 悪 ×2", fill="#333333", font=font_footer)
+    draw.text((270, 905), "抵抗力 : -30", fill="#333333", font=font_footer)
+    draw.text((460, 905), "にげる : ●●", fill="#333333", font=font_footer)
 
-    draw.text((65, 955), "Illus. TogoMoN Maker", fill="#777777", font=font_footer)
-    draw.text((580, 955), "001/050 RR ★", fill="#111111", font=font_footer)
+    draw.text((80, 940), "Illus. TogoMoN Maker", fill="#777777", font=font_footer)
+    draw.text((560, 940), "001/050 RR ★", fill="#111111", font=font_footer)
 
     return card.convert("RGB")
 
