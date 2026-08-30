@@ -29,8 +29,8 @@ def analyze_image_with_gemini(pil_image, api_key_val):
     説明: (2行程度のワザの説明文。1行は20文字以内)
     """
     
-    # 安定して画像解析を行えるモデルを使用
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # モデル名を最新版に修正
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     response = model.generate_content([prompt, pil_image])
     
     data = {
@@ -87,7 +87,7 @@ def generate_card(user_img, card_data):
     # 2. ヘッダー
     draw.rectangle([(45, 45), (card_w-45, 115)], fill=colors["header"], outline="#3D1A6A", width=4)
 
-    # 3. 写真配置 (横写真もぴったり収める)
+    # 3. 写真配置
     frame_x1, frame_y1, frame_x2, frame_y2 = 50, 135, card_w-50, 565
     frame_w, frame_h = frame_x2 - frame_x1, frame_y2 - frame_y1
     draw.rectangle([(frame_x1, frame_y1), (frame_x2, frame_y2)], fill="#FFFFFF")
