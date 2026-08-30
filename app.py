@@ -62,12 +62,12 @@ def detect_face_center(pil_img):
 
 def analyze_image_with_gemini(pil_image, api_key_val):
     default_data = {
-        "card_name": "めがねボーイ",
+        "card_name": "おもしろモンスター",
         "hp": "120",
         "type": "超",
-        "skill_name": "へんしんビーム",
+        "skill_name": "へんしんアタック",
         "damage": "60",
-        "desc": "ふしぎな めがねで みんなを びっくり させるぞ！"
+        "desc": "カメラを つけると げんきいっぱいに あらわれる ふしぎな モンスター！"
     }
 
     if not api_key_val:
@@ -77,19 +77,17 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         genai.configure(api_key=api_key_val)
         
         prompt = """
-        添付された画像を分析して、TogoMoNのカード風データを作成してください。
+        添付された画像を深く分析して、この写真にぴったりのTogoMoNカード用テキストを作成してください。
         以下のJSON形式のみを出力してください。
 
         {
-          "card_name": "写真の特徴を表した名前",
-          "hp": "120",
-          "type": "超",
-          "skill_name": "ワザ名",
-          "damage": "60",
-          "desc": "2行程度の説明文"
+          "card_name": "写真に写っている人物や物・表情の特徴を表した面白い名前（10文字以内）",
+          "hp": "100〜200の数値",
+          "type": "草/炎/水/雷/超/闘 のどれかひとつ",
+          "skill_name": "写真のポーズや雰囲気に関連したワザ名（10文字以内）",
+          "damage": "30〜120の数値",
+          "desc": "写真の状況やキャラクター性を表す2行程度の面白い説明文"
         }
-
-        ※ typeは (草 / 炎 / 水 / 雷 / 超 / 闘) の中から1つ選んでください。
         """
         
         model_names = ['gemini-2.0-flash', 'gemini-1.5-flash', 'models/gemini-1.5-flash']
@@ -175,28 +173,26 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
             break
     style = type_styles[t_key]
 
-    # 1. 2倍太枠＆超ハデハデ金ピカキラキラ外枠
-    border_margin = 52 # 枠の幅を従来の2倍（52px）に拡大
+    # 1. 太枠・ハデハデ金ピカ外枠
+    border_margin = 52
     
-    draw.rectangle([(0, 0), (card_w, card_h)], fill="#FFD700") # ド派手なゴールド
+    draw.rectangle([(0, 0), (card_w, card_h)], fill="#FFD700")
     draw.rectangle([(10, 10), (card_w-10, card_h-10)], fill="#FFF066")
     draw.rectangle([(20, 20), (card_w-20, card_h-20)], fill="#DAA520")
-    draw.rectangle([(32, 32), (card_w-32, card_h-32)], fill="#FF8C00") # メタルアクセント
+    draw.rectangle([(32, 32), (card_w-32, card_h-32)], fill="#FF8C00")
     draw.rectangle([(42, 42), (card_w-42, card_h-42)], fill="#B8860B")
 
-    # 太くなった外枠エリア全体に星（★）を大量（600個）に散りばめる
     random.seed(42)
     star_colors = ["#FFFFFF", "#FFFF99", "#FFE066", "#FFD700", "#FF69B4", "#00FFFF"]
     for _ in range(600):
         sx = random.randint(0, card_w)
         sy = random.randint(0, card_h)
-        # 内側カード領域（52px〜）の外側にだけ星を描画
         if sx < border_margin or sx > card_w - border_margin or sy < border_margin or sy > card_h - border_margin:
-            ssize = random.randint(4, 14) # 星のサイズも大きく拡大！
+            ssize = random.randint(4, 14)
             scolor = random.choice(star_colors)
             draw_star(draw, sx, sy, ssize, scolor)
 
-    # 2. 内側カード本体（太枠に合わせてレイアウトを微修正）
+    # 2. 内側カード本体
     draw.rectangle([(border_margin, border_margin), (card_w-border_margin, card_h-border_margin)], fill=style["card_bg"])
 
     # 3. ヘッダー帯
@@ -210,7 +206,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     font_desc = get_japanese_font(22)
     font_footer = get_japanese_font(18)
 
-    draw.text((75, 76), str(card_data.get("card_name", "めがねボーイ")), fill="#FFFFFF", font=font_name)
+    draw.text((75, 76), str(card_data.get("card_name", "おもしろモンスター")), fill="#FFFFFF", font=font_name)
     
     draw.text((475, 83), "HP", fill="#FFEB3B", font=font_hp_label)
     draw.text((510, 67), str(card_data.get("hp", "120")), fill="#FFFFFF", font=font_hp_val)
@@ -241,7 +237,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     draw.ellipse([(85, 655), (125, 695)], fill=style["bg"])
     draw.ellipse([(135, 655), (175, 695)], fill=style["accent"])
     
-    draw.text((195, 657), str(card_data.get("skill_name", "へんしんビーム")), fill="#111111", font=font_skill)
+    draw.text((195, 657), str(card_data.get("skill_name", "へんしんアタック")), fill="#111111", font=font_skill)
     draw.text((580, 653), str(card_data.get("damage", "60")), fill="#111111", font=font_dmg)
 
     desc_text = str(card_data.get("desc", "")).replace("\\n", "\n")
@@ -266,13 +262,22 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
 col1, col2 = st.columns([1, 1])
 
 if uploaded_file is not None:
+    # 画像ファイル自体が変わったことを識別するためのキー
+    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+    
     user_img = Image.open(uploaded_file).convert("RGB")
     user_img_fixed = ImageOps.exif_transpose(user_img)
-    
-    base_y_ratio = detect_face_center(user_img_fixed)
 
-    with st.spinner("🎴 TogoMoNカードを作成中..."):
-        card_data = analyze_image_with_gemini(user_img_fixed, api_key)
+    # 新しい画像がアップロードされた場合、AI解析を強制的に実行
+    if "last_file_id" not in st.session_state or st.session_state["last_file_id"] != file_id:
+        st.session_state["last_file_id"] = file_id
+        st.session_state["base_y_ratio"] = detect_face_center(user_img_fixed)
+        
+        with st.spinner("🤖 AIが新しい写真を分析してカードデータを生成中..."):
+            st.session_state["card_data"] = analyze_image_with_gemini(user_img_fixed, api_key)
+
+    base_y_ratio = st.session_state.get("base_y_ratio", 0.4)
+    card_data = st.session_state.get("card_data", {})
 
     with col2:
         st.subheader("⚙️ 写真の位置調整")
