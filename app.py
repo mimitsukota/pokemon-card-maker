@@ -40,7 +40,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         "skill_name": "へんしんビーム",
         "damage": "60",
         "desc": "ふしぎな めがねで みんなを びっくり させるぞ！",
-        "face_box": [0, 0, 1000, 1000] # [ymin, xmin, ymax, xmax] (0-1000の正規化座標)
+        "face_box": [0, 0, 1000, 1000]
     }
 
     if not api_key_val:
@@ -53,7 +53,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         添付された画像を分析して、Togomonのカード風データを作成してください。
         また、画像内の主要な人物の顔の位置（バウンディングボックス）を 0〜1000 の数値座標で検出してください。
 
-        以下のJSON形式のみを出力してください。不要なMarkdown記法や解説文は一切含めないでください。
+        以下のJSON形式のみを出力してください。
 
         {
           "card_name": "写真の特徴を表した名前",
@@ -62,11 +62,11 @@ def analyze_image_with_gemini(pil_image, api_key_val):
           "skill_name": "ワザ名",
           "damage": "60",
           "desc": "2行程度の説明文",
-          "face_box": [ymin, xmin, ymax, xmax]
+          "face_box": [0, 0, 1000, 1000]
         }
 
         ※ typeは (草 / 炎 / 水 / 雷 / 超 / 闘) の中から1つ選んでください。
-        ※ face_box は [上, 左, 下, 右] の0〜1000の範囲の整数値です。顔が見つからない場合は [0, 0, 1000, 1000] としてください。
+        ※ face_box は [上, 左, 下, 右] の0〜1000の範囲の整数値です。
         """
         
         model_names = ['gemini-2.0-flash', 'gemini-1.5-flash', 'models/gemini-1.5-flash']
@@ -83,7 +83,60 @@ def analyze_image_with_gemini(pil_image, api_key_val):
 
         if response and response.text:
             text = response.text.strip()
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0].strip()
-            elif "```" in text:
-                text = text.split("
+            # JSON部分の抽出処理を安全に変更
+            start_idx = text.find('{')
+            end_idx = text.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                json_str = text[start_idx:end_idx+1]
+                parsed = json.loads(json_str)
+                for k in default_data.keys():
+                    if k in parsed:
+                        default_data[k] = parsed[k]
+
+    except Exception:
+        pass
+        
+    return default_data
+
+def crop_face_centered(img, face_box, target_w, target_h):
+    """顔を中心にして指定サイズにクロップする"""
+    u_w, u_h = img.size
+    
+    ymin, xmin, ymax, xmax = face_box
+    box_top = (ymin / 1000.0) * u_h
+    box_left = (xmin / 1000.0) * u_w
+    box_bottom = (ymax / 1000.0) * u_h
+    box_right = (xmax / 1000.0) * u_w
+    
+    center_x = (box_left + box_right) / 2.0
+    center_y = (box_top + box_bottom) / 2.0
+
+    scale = max(target_w / u_w, target_h / u_h)
+    
+    new_w = int(u_w * scale)
+    new_h = int(u_h * scale)
+    resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    
+    center_x_scaled = center_x * scale
+    center_y_scaled = center_y * scale
+    
+    crop_x1 = center_x_scaled - (target_w / 2.0)
+    crop_y1 = center_y_scaled - (target_h * 0.4)
+    
+    crop_x1 = max(0, min(crop_x1, new_w - target_w))
+    crop_y1 = max(0, min(crop_y1, new_h - target_h))
+    
+    crop_x2 = crop_x1 + target_w
+    crop_y2 = crop_y1 + target_h
+    
+    return resized_img.crop((int(crop_x1), int(crop_y1), int(crop_x2), int(crop_y2)))
+
+def generate_card(user_img, card_data):
+    card_w, card_h = 750, 1050
+    card = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(card)
+
+    type_styles = {
+        "草": {"bg": "#2E7D32", "card_bg": "#E8F5E9", "accent": "#81C784", "symbol": "草"},
+        "炎": {"bg": "#C62828", "card_bg": "#FFEBEE", "accent": "#E57373", "symbol": "炎"},
+        "水": {"bg": "#1565C0", "card_bg": "#E3F2
