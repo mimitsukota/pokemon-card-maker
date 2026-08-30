@@ -4,10 +4,10 @@ import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import google.generativeai as genai
 
-st.set_page_config(page_title="AIポケモンカードメーカー", page_icon="🎴", layout="wide")
+st.set_page_config(page_title="AI Togomonカードメーカー", page_icon="🎴", layout="wide")
 
-st.title("🎴 AIおまごちゃん ポケモンカードメーカー")
-st.caption("写真を1枚アップロードするだけで、AIが本格ポケモンカードを自動作成します！")
+st.title("🎴 AIおまごちゃん Togomonカードメーカー")
+st.caption("写真を1枚アップロードするだけで、AIが本格Togomonカードを自動作成します！")
 
 # 日本語フォント設定
 def get_japanese_font(size):
@@ -48,7 +48,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         genai.configure(api_key=api_key_val)
         
         prompt = """
-        添付された画像を分析して、ポケモンのカード風データを作成してください。
+        添付された画像を分析して、Togomonのカード風データを作成してください。
         以下のフォーマットを厳密に守って日本語で出力してください。
 
         カード名: (写真の特徴を表した可愛い/かっこいい名前)
@@ -95,12 +95,12 @@ def analyze_image_with_gemini(pil_image, api_key_val):
     return default_data
 
 def generate_card(user_img, card_data):
-    # ポケカ標準比率に近い高解像度キャンバス (750x1050)
+    # 高解像度キャンバス (750x1050)
     card_w, card_h = 750, 1050
     card = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
     draw = ImageDraw.Draw(card)
 
-    # タイプ別カラーテーマ (本物のポケカ風)
+    # タイプ別カラーテーマ
     type_styles = {
         "草": {"bg": "#2E7D32", "card_bg": "#E8F5E9", "accent": "#81C784", "symbol": "草"},
         "炎": {"bg": "#C62828", "card_bg": "#FFEBEE", "accent": "#E57373", "symbol": "炎"},
@@ -117,9 +117,9 @@ def generate_card(user_img, card_data):
             break
     style = type_styles[t_key]
 
-    # 1. イエロー／ゴールドの外枠（ポケカ伝統の黄枠）
-    draw.rectangle([(0, 0), (card_w, card_h)], fill="#F1C40F") # 外枠黄色
-    draw.rectangle([(18, 18), (card_w-18, card_h-18)], fill="#D4AC0D") # 内側ゴールドアクセント
+    # 1. イエロー／ゴールドの外枠
+    draw.rectangle([(0, 0), (card_w, card_h)], fill="#F1C40F")
+    draw.rectangle([(18, 18), (card_w-18, card_h-18)], fill="#D4AC0D")
     
     # 2. カード本体ベース背景
     draw.rectangle([(26, 26), (card_w-26, card_h-26)], fill=style["card_bg"])
@@ -159,7 +159,7 @@ def generate_card(user_img, card_data):
 
     # 写真のリサイズ & アスペクト比維持配置
     u_w, u_h = user_img_fixed.size
-    ratio = max(img_w / u_w, img_h / u_h) # トリミングして枠いっぱいに収める
+    ratio = max(img_w / u_w, img_h / u_h)
     new_w, new_h = int(u_w * ratio), int(u_h * ratio)
     resized_img = user_img_fixed.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
@@ -170,9 +170,9 @@ def generate_card(user_img, card_data):
 
     card.paste(cropped_img, (img_x1, img_y1))
 
-    # 5. サブ情報バー（たねポケモン表記風）
+    # 5. サブ情報バー（たねTogomon表記）
     draw.rectangle([(50, 580), (card_w-50, 615)], fill="#FFFFFF", outline="#B7950B", width=2)
-    draw.text((65, 586), f"たねポケモン  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
+    draw.text((65, 586), f"たねTogomon  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
 
     # 6. ワザ表示エリア
     draw.rectangle([(45, 630), (card_w-45, 890)], fill="#FFFFFF", outline=style["bg"], width=3)
@@ -209,7 +209,7 @@ def generate_card(user_img, card_data):
 col1, col2 = st.columns([1, 1])
 
 if uploaded_file is not None:
-    with st.spinner("🤖 AIが本格ポケモンカードをデザイン中..."):
+    with st.spinner("🤖 AIがTogomonカードをデザイン中..."):
         user_img = Image.open(uploaded_file).convert("RGB")
         
         card_data = analyze_image_with_gemini(user_img, api_key)
