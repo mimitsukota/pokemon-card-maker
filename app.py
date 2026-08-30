@@ -4,9 +4,9 @@ import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import google.generativeai as genai
 
-st.set_page_config(page_title="AI Togomonカードメーカー", page_icon="🎴", layout="wide")
+st.set_page_config(page_title="Togomonカードメーカー", page_icon="🎴", layout="wide")
 
-st.title("🎴 AIおまごちゃん Togomonカードメーカー")
+st.title("🎴 Togomonカードメーカー")
 st.caption("写真を1枚アップロードするだけで、AIが本格Togomonカードを自動作成します！")
 
 # 日本語フォント設定
@@ -147,7 +147,7 @@ def generate_card(user_img, card_data):
     draw.ellipse([(645, 52), (695, 102)], fill=style["accent"], outline="#FFFFFF", width=2)
     draw.text((656, 58), style["symbol"], fill="#FFFFFF", font=font_hp_label)
 
-    # 4. メイン写真領域（枠線とシャドウ効果）
+    # 4. メイン写真領域
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
     img_x1, img_y1, img_x2, img_y2 = 45, 130, card_w-45, 570
@@ -170,7 +170,7 @@ def generate_card(user_img, card_data):
 
     card.paste(cropped_img, (img_x1, img_y1))
 
-    # 5. サブ情報バー（たねTogomon表記）
+    # 5. サブ情報バー
     draw.rectangle([(50, 580), (card_w-50, 615)], fill="#FFFFFF", outline="#B7950B", width=2)
     draw.text((65, 586), f"たねTogomon  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
 
@@ -194,14 +194,14 @@ def generate_card(user_img, card_data):
         draw.text((70, y_off), l, fill="#333333", font=font_desc)
         y_off += 38
 
-    # 7. フッター（弱点・抵抗力・にげる・レアリティ）
+    # 7. フッター
     draw.rectangle([(45, 900), (card_w-45, 990)], fill="#F4F4F4", outline="#CCCCCC", width=2)
 
     draw.text((65, 920), "弱点 : 悪 ×2", fill="#333333", font=font_footer)
     draw.text((270, 920), "抵抗力 : -30", fill="#333333", font=font_footer)
     draw.text((480, 920), "にげる : ●●", fill="#333333", font=font_footer)
 
-    draw.text((65, 955), "Illus. AI Omago Maker", fill="#777777", font=font_footer)
+    draw.text((65, 955), "Illus. Togomon Maker", fill="#777777", font=font_footer)
     draw.text((580, 955), "001/050 RR ★", fill="#111111", font=font_footer)
 
     return card.convert("RGB")
