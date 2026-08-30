@@ -1,13 +1,26 @@
 import io
 import os
+import urllib.request
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import google.generativeai as genai
 
 st.set_page_config(page_title="AIポケモンカード風メーカー", page_icon="🎴", layout="wide")
 
 st.title("🎴 AIおまごちゃん ポケモンカードメーカー")
 st.caption("写真を入れるとAIが自動分析して、名前やワザを自動生成します！")
+
+# 日本語フォントの自動ダウンロード関数
+@st.cache_resource
+def get_japanese_font(size):
+    font_path = "NotoSansJP-Bold.ttf"
+    if not os.path.exists(font_path):
+        url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Bold.ttf"
+        urllib.request.urlretrieve(url, font_path)
+    try:
+        return ImageFont.truetype(font_path, size)
+    except Exception:
+        return ImageFont.load_default()
 
 # APIキーの設定
 api_key = st.sidebar.text_input("Gemini API Key", type="password")
@@ -16,12 +29,12 @@ uploaded_file = st.file_uploader("📷 写真をアップロードしてくだ�
 
 def analyze_image_with_gemini(pil_image, api_key_val):
     default_data = {
-        "card_name": "すまいる ボーイ",
+        "card_name": "めがね ボーイ",
         "hp": "HP 120",
         "type": "パープル",
-        "skill_name": "にっこりスマイル",
+        "skill_name": "へんしんビーム",
         "damage": "60",
-        "desc": "みんなを えがおにする\nすてきな パワー！"
+        "desc": "ふしぎな めがねで みんなを\nびっくり させるぞ！"
     }
 
     try:
@@ -39,7 +52,6 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         説明: (2行程度のワザの説明文。1行は20文字以内)
         """
         
-        # 確実に認識されるモデル形式で複数指定を試行
         model_names = ['gemini-2.0-flash', 'gemini-1.5-flash', 'models/gemini-1.5-flash']
         response = None
         
@@ -68,8 +80,8 @@ def analyze_image_with_gemini(pil_image, api_key_val):
                 elif "説明:" in line:
                     default_data["desc"] = line.split("説明:")[1].strip()
                     
-    except Exception as e:
-        st.warning("⚠️ AI自動解析をスキップし、基本テンプレートでカードを作成しました。")
+    except Exception:
+        pass
         
     return default_data
 
@@ -100,15 +112,17 @@ def generate_card(user_img, card_data):
     # 2. ヘッダー
     draw.rectangle([(45, 45), (card_w-45, 115)], fill=colors["header"], outline="#3D1A6A", width=4)
 
-    # 3. 写真配置
+    # 3. 写真配置 (向きの自動修正)
+    user_img_fixed = ImageOps.exif_transpose(user_img)
+    
     frame_x1, frame_y1, frame_x2, frame_y2 = 50, 135, card_w-50, 565
     frame_w, frame_h = frame_x2 - frame_x1, frame_y2 - frame_y1
     draw.rectangle([(frame_x1, frame_y1), (frame_x2, frame_y2)], fill="#FFFFFF")
 
-    img_w, img_h = user_img.size
+    img_w, img_h = user_img_fixed.size
     ratio = min(frame_w / img_w, frame_h / img_h)
     new_w, new_h = int(img_w * ratio), int(img_h * ratio)
-    resized_user_img = user_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    resized_user_img = user_img_fixed.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
     paste_x = frame_x1 + (frame_w - new_w) // 2
     paste_y = frame_y1 + (frame_h - new_h) // 2
@@ -121,20 +135,11 @@ def generate_card(user_img, card_data):
     draw.rectangle([(50, 615), (card_w-50, 860)], fill=colors["bg"], outline="#3D1A6A", width=4)
     draw.rectangle([(50, 875), (card_w-50, 990)], fill=colors["header"], outline="#3D1A6A", width=3)
 
-    # フォント設定
-    font_paths = ["/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "C:\\Windows\\Fonts\\meiryo.ttc"]
-    font_title = font_hp = font_bold = font_main = None
-    for p in font_paths:
-        try:
-            font_title = ImageFont.truetype(p, 36)
-            font_hp = ImageFont.truetype(p, 32)
-            font_bold = ImageFont.truetype(p, 28)
-            font_main = ImageFont.truetype(p, 22)
-            break
-        except:
-            continue
-    if not font_title:
-        font_title = font_hp = font_bold = font_main = ImageFont.load_default()
+    # フォントの取得
+    font_title = get_japanese_font(36)
+    font_hp = get_japanese_font(32)
+    font_bold = get_japanese_font(28)
+    font_main = get_japanese_font(22)
 
     # 文字の描画
     draw.text((70, 58), card_data["card_name"], fill="#000000", font=font_title)
@@ -144,7 +149,8 @@ def generate_card(user_img, card_data):
     draw.text((80, 635), f"【ワザ】 {card_data['skill_name']}", fill="#000000", font=font_bold)
     draw.text((610, 635), card_data["damage"], fill="#000000", font=font_hp)
     
-    lines = card_data["desc"].split("\n")
+    desc_text = card_data["desc"].replace("\\n", "\n")
+    lines = desc_text.split("\n")
     y_off = 700
     for l in lines:
         draw.text((80, y_off), l, fill="#2D3436", font=font_main)
@@ -165,7 +171,6 @@ if uploaded_file is not None:
         with st.spinner("🤖 AIが写真を分析してカードを作成中..."):
             user_img = Image.open(uploaded_file).convert("RGB")
             
-            # AI分析（エラーが起きても止まらない構造）
             card_data = analyze_image_with_gemini(user_img, api_key)
             card_img = generate_card(user_img, card_data)
 
