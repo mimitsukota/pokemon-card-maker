@@ -2,7 +2,7 @@ import io
 import os
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
-from google import genai
+import google.generativeai as genai
 
 st.set_page_config(page_title="AIポケモンカード風メーカー", page_icon="🎴", layout="wide")
 
@@ -15,7 +15,8 @@ api_key = st.sidebar.text_input("Gemini API Key", type="password")
 uploaded_file = st.file_uploader("📷 写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
 def analyze_image_with_gemini(pil_image, api_key_val):
-    client = genai.Client(api_key=api_key_val)
+    genai.configure(api_key=api_key_val)
+    
     prompt = """
     添付された画像を分析して、オリジナルのポケモンカード風データを作成してください。
     以下のフォーマットを厳密に守ってテキストのみを出力してください（余計な解説は不要です）。
@@ -28,10 +29,9 @@ def analyze_image_with_gemini(pil_image, api_key_val):
     説明: (2行程度のワザの説明文。1行は20文字以内)
     """
     
-    response = client.models.generate_content(
-        model='gemini-1.5-flash',
-        contents=[pil_image, prompt]
-    )
+    # 安定して画像解析を行えるモデルを使用
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    response = model.generate_content([prompt, pil_image])
     
     data = {
         "card_name": "すまいる ボーイ",
@@ -41,20 +41,22 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         "damage": "60",
         "desc": "みんなを えがおにする\nすてきな パワー！"
     }
-    lines = response.text.strip().split("\n")
-    for line in lines:
-        if "カード名:" in line:
-            data["card_name"] = line.split("カード名:")[1].strip()
-        elif "HP:" in line:
-            data["hp"] = line.split("HP:")[1].strip()
-        elif "タイプ:" in line:
-            data["type"] = line.split("タイプ:")[1].strip()
-        elif "ワザ名:" in line:
-            data["skill_name"] = line.split("ワザ名:")[1].strip()
-        elif "ダメージ:" in line:
-            data["damage"] = line.split("ダメージ:")[1].strip()
-        elif "説明:" in line:
-            data["desc"] = line.split("説明:")[1].strip()
+    
+    if response.text:
+        lines = response.text.strip().split("\n")
+        for line in lines:
+            if "カード名:" in line:
+                data["card_name"] = line.split("カード名:")[1].strip()
+            elif "HP:" in line:
+                data["hp"] = line.split("HP:")[1].strip()
+            elif "タイプ:" in line:
+                data["type"] = line.split("タイプ:")[1].strip()
+            elif "ワザ名:" in line:
+                data["skill_name"] = line.split("ワザ名:")[1].strip()
+            elif "ダメージ:" in line:
+                data["damage"] = line.split("ダメージ:")[1].strip()
+            elif "説明:" in line:
+                data["desc"] = line.split("説明:")[1].strip()
             
     return data
 
@@ -148,25 +150,28 @@ if uploaded_file is not None:
         st.warning("👈 左側のサイドバーに Gemini API キーを入力してください。")
     else:
         with st.spinner("🤖 AIが写真を分析してカードを作成中..."):
-            user_img = Image.open(uploaded_file).convert("RGB")
-            
-            # AI分析
-            card_data = analyze_image_with_gemini(user_img, api_key)
-            card_img = generate_card(user_img, card_data)
+            try:
+                user_img = Image.open(uploaded_file).convert("RGB")
+                
+                # AI分析
+                card_data = analyze_image_with_gemini(user_img, api_key)
+                card_img = generate_card(user_img, card_data)
 
-            with col1:
-                st.subheader("🖼️ AI作成カード")
-                st.image(card_img, use_container_width=True)
+                with col1:
+                    st.subheader("🖼️ AI作成カード")
+                    st.image(card_img, use_container_width=True)
 
-            buf = io.BytesIO()
-            card_img.save(buf, format="PNG")
-            
-            with col2:
-                st.subheader("📋 生成されたデータ")
-                st.write(card_data)
-                st.download_button(
-                    label="カード画像をダウンロード (PNG)",
-                    data=buf.getvalue(),
-                    file_name=f"{card_data['card_name']}_card.png",
-                    mime="image/png"
-                )
+                buf = io.BytesIO()
+                card_img.save(buf, format="PNG")
+                
+                with col2:
+                    st.subheader("📋 生成されたデータ")
+                    st.write(card_data)
+                    st.download_button(
+                        label="カード画像をダウンロード (PNG)",
+                        data=buf.getvalue(),
+                        file_name=f"{card_data['card_name']}_card.png",
+                        mime="image/png"
+                    )
+            except Exception as e:
+                st.error(f"エラーが発生しました: {e}")
