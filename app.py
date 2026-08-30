@@ -216,15 +216,12 @@ if uploaded_file is not None:
         card_img = generate_card(user_img, card_data)
 
         with col1:
-            st.subheader("🖼️ 完成したカード")
             st.image(card_img, use_container_width=True)
 
         buf = io.BytesIO()
         card_img.save(buf, format="PNG")
         
         with col2:
-            st.subheader("📋 AI生成データ")
-            st.write(card_data)
             st.download_button(
                 label="🎴 カード画像を保存する (PNG)",
                 data=buf.getvalue(),
