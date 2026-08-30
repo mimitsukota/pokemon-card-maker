@@ -9,7 +9,7 @@ st.set_page_config(page_title="AIポケモンカード風メーカー", page_ico
 st.title("🎴 AIおまごちゃん ポケモンカードメーカー")
 st.caption("写真を入れるとAIが自動分析して、名前やワザを自動生成します！")
 
-# 確実に文字化けを防ぐフォント読み込み関数
+# 日本語フォント設定
 def get_japanese_font(size):
     font_paths = [
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
@@ -25,7 +25,7 @@ def get_japanese_font(size):
                 continue
     return ImageFont.load_default()
 
-# APIキー設定（Secretsにある場合は自動読み込み、なければ入力欄を表示）
+# Secretsからの自動読み込み対応
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 if not api_key:
     api_key = st.sidebar.text_input("Gemini API Key", type="password")
