@@ -40,7 +40,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         "skill_name": "へんしんビーム",
         "damage": "60",
         "desc": "ふしぎな めがねで みんなを びっくり させるぞ！",
-        "face_box": [0, 0, 1000, 1000]
+        "eye_center": [500, 500]  # [y, x] 0-1000表記
     }
 
     if not api_key_val:
@@ -51,7 +51,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         
         prompt = """
         添付された画像を分析して、Togomonのカード風データを作成してください。
-        また、画像内の主要な人物の顔の位置（バウンディングボックス）を 0〜1000 の数値座標で検出してください。
+        また、画像内の主要な人物の「両目の中心位置（目元）」を 0〜1000 の数値座標 [y, x] で指定してください。
 
         以下のJSON形式のみを出力してください。
 
@@ -62,11 +62,11 @@ def analyze_image_with_gemini(pil_image, api_key_val):
           "skill_name": "ワザ名",
           "damage": "60",
           "desc": "2行程度の説明文",
-          "face_box": [0, 0, 1000, 1000]
+          "eye_center": [y, x]
         }
 
         ※ typeは (草 / 炎 / 水 / 雷 / 超 / 闘) の中から1つ選んでください。
-        ※ face_box は [上, 左, 下, 右] の0〜1000の範囲の整数値です。
+        ※ eye_center は [上からの高さ, 左からの位置] を0〜1000の数値で表した座標です。見つからない場合は [500, 500] としてください。
         """
         
         model_names = ['gemini-2.0-flash', 'gemini-1.5-flash', 'models/gemini-1.5-flash']
@@ -83,7 +83,6 @@ def analyze_image_with_gemini(pil_image, api_key_val):
 
         if response and response.text:
             text = response.text.strip()
-            # JSON部分の抽出処理を安全に変更
             start_idx = text.find('{')
             end_idx = text.rfind('}')
             if start_idx != -1 and end_idx != -1:
@@ -98,31 +97,32 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         
     return default_data
 
-def crop_face_centered(img, face_box, target_w, target_h):
-    """顔を中心にして指定サイズにクロップする"""
+def crop_eyes_centered(img, eye_center, target_w, target_h):
+    """目の中心位置を基準にしてクロップする"""
     u_w, u_h = img.size
     
-    ymin, xmin, ymax, xmax = face_box
-    box_top = (ymin / 1000.0) * u_h
-    box_left = (xmin / 1000.0) * u_w
-    box_bottom = (ymax / 1000.0) * u_h
-    box_right = (xmax / 1000.0) * u_w
+    eye_y, eye_x = eye_center
     
-    center_x = (box_left + box_right) / 2.0
-    center_y = (box_top + box_bottom) / 2.0
+    # 目の座標を元の画像のピクセル位置に変換
+    pixel_x = (eye_x / 1000.0) * u_w
+    pixel_y = (eye_y / 1000.0) * u_h
 
+    # 枠に収めるための拡大・縮小倍率
     scale = max(target_w / u_w, target_h / u_h)
     
     new_w = int(u_w * scale)
     new_h = int(u_h * scale)
     resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
     
-    center_x_scaled = center_x * scale
-    center_y_scaled = center_y * scale
+    # 拡大後の目の座標
+    scaled_eye_x = pixel_x * scale
+    scaled_eye_y = pixel_y * scale
     
-    crop_x1 = center_x_scaled - (target_w / 2.0)
-    crop_y1 = center_y_scaled - (target_h * 0.4)
+    # 目の位置がカードの枠の「上から約35%」の位置に来るように切り抜く（収まりが良い位置）
+    crop_x1 = scaled_eye_x - (target_w / 2.0)
+    crop_y1 = scaled_eye_y - (target_h * 0.35)
     
+    # 画像からはみ出さないよう限界調整
     crop_x1 = max(0, min(crop_x1, new_w - target_w))
     crop_y1 = max(0, min(crop_y1, new_h - target_h))
     
@@ -152,14 +152,14 @@ def generate_card(user_img, card_data):
             break
     style = type_styles[t_key]
 
-    # 1. イエロー／ゴールドの外枠
+    # 1. 外枠
     draw.rectangle([(0, 0), (card_w, card_h)], fill="#F1C40F")
     draw.rectangle([(18, 18), (card_w-18, card_h-18)], fill="#D4AC0D")
     
     # 2. カード本体ベース背景
     draw.rectangle([(26, 26), (card_w-26, card_h-26)], fill=style["card_bg"])
 
-    # 3. ヘッダー帯（名前＆HP）
+    # 3. ヘッダー帯
     draw.rectangle([(40, 42), (card_w-40, 115)], fill=style["bg"])
     
     font_name = get_japanese_font(34)
@@ -178,7 +178,7 @@ def generate_card(user_img, card_data):
     draw.ellipse([(645, 52), (695, 102)], fill=style["accent"], outline="#FFFFFF", width=2)
     draw.text((656, 58), style["symbol"], fill="#FFFFFF", font=font_hp_label)
 
-    # 4. メイン写真領域（顔中心クロップ適用）
+    # 4. メイン写真領域（目を基準にクロップ）
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
     img_x1, img_y1, img_x2, img_y2 = 45, 130, card_w-45, 570
@@ -187,8 +187,8 @@ def generate_card(user_img, card_data):
     draw.rectangle([(img_x1-5, img_y1-5), (img_x2+5, img_y2+5)], fill="#B7950B")
     draw.rectangle([(img_x1, img_y1), (img_x2, img_y2)], fill="#000000")
 
-    face_box = card_data.get("face_box", [0, 0, 1000, 1000])
-    cropped_img = crop_face_centered(user_img_fixed, face_box, img_w, img_h)
+    eye_center = card_data.get("eye_center", [500, 500])
+    cropped_img = crop_eyes_centered(user_img_fixed, eye_center, img_w, img_h)
 
     card.paste(cropped_img, (img_x1, img_y1))
 
@@ -227,7 +227,8 @@ def generate_card(user_img, card_data):
 col1, col2 = st.columns([1, 1])
 
 if uploaded_file is not None:
-    with st.spinner("🤖 AIが顔の位置を検出してTogomonカードをデザイン中..."):
+    # メッセージを変更（「AIが顔の位置を検出して」を削除）
+    with st.spinner("🎴 Togomonカードを作成中..."):
         user_img = Image.open(uploaded_file).convert("RGB")
         
         card_data = analyze_image_with_gemini(user_img, api_key)
