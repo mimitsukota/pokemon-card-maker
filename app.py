@@ -3,7 +3,6 @@ import os
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
 from google import genai
-from google.genai import types
 
 st.set_page_config(page_title="AIポケモンカード風メーカー", page_icon="🎴", layout="wide")
 
@@ -15,7 +14,7 @@ api_key = st.sidebar.text_input("Gemini API Key", type="password")
 
 uploaded_file = st.file_uploader("📷 写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
-def analyze_image_with_gemini(image_bytes, api_key_val):
+def analyze_image_with_gemini(pil_image, api_key_val):
     client = genai.Client(api_key=api_key_val)
     prompt = """
     添付された画像を分析して、オリジナルのポケモンカード風データを作成してください。
@@ -30,14 +29,18 @@ def analyze_image_with_gemini(image_bytes, api_key_val):
     """
     
     response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=[
-            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-            prompt
-        ]
+        model='gemini-1.5-flash',
+        contents=[pil_image, prompt]
     )
     
-    data = {"card_name": "すまいる ボーイ", "hp": "HP 120", "type": "パープル", "skill_name": "にっこりスマイル", "damage": "60", "desc": "みんなを えがおにする\nすてきな パワー！"}
+    data = {
+        "card_name": "すまいる ボーイ",
+        "hp": "HP 120",
+        "type": "パープル",
+        "skill_name": "にっこりスマイル",
+        "damage": "60",
+        "desc": "みんなを えがおにする\nすてきな パワー！"
+    }
     lines = response.text.strip().split("\n")
     for line in lines:
         if "カード名:" in line:
@@ -145,11 +148,10 @@ if uploaded_file is not None:
         st.warning("👈 左側のサイドバーに Gemini API キーを入力してください。")
     else:
         with st.spinner("🤖 AIが写真を分析してカードを作成中..."):
-            img_bytes = uploaded_file.getvalue()
-            user_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+            user_img = Image.open(uploaded_file).convert("RGB")
             
             # AI分析
-            card_data = analyze_image_with_gemini(img_bytes, api_key)
+            card_data = analyze_image_with_gemini(user_img, api_key)
             card_img = generate_card(user_img, card_data)
 
             with col1:
