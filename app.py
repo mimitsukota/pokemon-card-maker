@@ -68,7 +68,14 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         "type": "超",
         "skill_name": "へんしんアタック",
         "damage": "60",
-        "desc": "いつものにこやかな 表情の うらには\nすさまじい 集中力と 技が ひめられている。\nとくいわざの くりだしは とても すばやい。\nであうと みんなが 笑顔に なってしまうぞ！"
+        "desc": "いつものにこやかな 表情の うらには\nすさまじい 集中力と 技が ひめられている。\nとくいわざの くりだしは とても すばやい。\nであうと みんなが 笑顔に なってしまうぞ！",
+        "dex_no": "001",
+        "height": "1.0m",
+        "weight": "15.0kg",
+        "weakness": "悪 ×2",
+        "resistance": "-30",
+        "escape": "●●",
+        "card_no": "001/050"
     }
 
     if not api_key_val:
@@ -78,7 +85,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         genai.configure(api_key=api_key_val)
         
         prompt = """
-        添付された画像を深く分析して、この写真の人物や対象の特徴・性格・得意技の秘訣などを盛り込んだTogoMoNカード用テキストを作成してください。
+        添付された画像を深く分析して、この写真の人物や対象の特徴・性格・ステータスを盛り込んだTogoMoNカード用テキストを作成してください。
         以下のJSON形式のみを出力してください。
 
         {
@@ -87,7 +94,14 @@ def analyze_image_with_gemini(pil_image, api_key_val):
           "type": "草/炎/水/雷/超/闘 のどれかひとつ",
           "skill_name": "写真のポーズや雰囲気に関連したワザ名（8文字以内）",
           "damage": "30〜120の数値",
-          "desc": "写真の特徴や得意技の凄さを表す詳しい解説文（改行コード\\nを使ってちょうど4行になるように作成してください。1行あたり18〜22文字程度。）"
+          "desc": "写真の特徴や得意技の凄さを表す解説文（改行コード\\nを使ってちょうど4行。1行あたり18〜22文字程度。）",
+          "dex_no": "001〜150の3桁数値（例: 025）",
+          "height": "写真の印象に合わせた高さ（例: 0.5m や 1.6m）",
+          "weight": "写真の印象に合わせた重さ（例: 4.2kg や 55.0kg）",
+          "weakness": "属性に合わせた弱点（例: 炎 ×2 や 水 ×2 や 悪 ×2）",
+          "resistance": "抵抗力（例: -20 や -30 や なし）",
+          "escape": "にげるエネルギー（例: ● や ●● や ●●●）",
+          "card_no": "図鑑番号に合わせたカード番号（例: 025/050）"
         }
         """
         
@@ -232,9 +246,14 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     cropped_img = crop_image(user_img_fixed, img_w, img_h, base_y_ratio, y_offset)
     card.paste(cropped_img, (img_x1, img_y1))
 
-    # 5. サブ情報バー
+    # 5. サブ情報バー（可変対応）
+    dex_no = card_data.get("dex_no", "001")
+    height = card_data.get("height", "1.0m")
+    weight = card_data.get("weight", "15.0kg")
+    sub_info_text = f"たねTogoMoN  /  全国図鑑 NO.{dex_no}  /  たかさ: {height}  おもさ: {weight}"
+    
     draw.rectangle([(62, 560), (card_w-62, 592)], fill="#FFFFFF", outline="#B7950B", width=2)
-    draw.text((72, 567), "たねTogoMoN  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
+    draw.text((72, 567), sub_info_text, fill="#555555", font=font_footer)
 
     # 6. ワザ・説明エリア
     draw.rectangle([(60, 605), (card_w-60, 882)], fill="#FFFFFF", outline=style["bg"], width=3)
@@ -252,7 +271,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     # 区切り線
     draw.line([(75, 670), (card_w-75, 670)], fill="#EEEEEE", width=2)
 
-    # 4行説明文の自動整列描画
+    # 4行説明文
     raw_desc = str(card_data.get("desc", "")).replace("\\n", "\n")
     lines = []
     for paragraph in raw_desc.split("\n"):
@@ -263,15 +282,20 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
         draw.text((75, y_off), l, fill="#333333", font=font_desc)
         y_off += 30
 
-    # 7. フッター
+    # 7. フッター（可変対応）
+    weakness = card_data.get("weakness", "悪 ×2")
+    resistance = card_data.get("resistance", "-30")
+    escape = card_data.get("escape", "●●")
+    card_no = card_data.get("card_no", "001/050")
+
     draw.rectangle([(60, 890), (card_w-60, 975)], fill="#F4F4F4", outline="#CCCCCC", width=2)
 
-    draw.text((75, 905), "弱点 : 悪 ×2", fill="#333333", font=font_footer)
-    draw.text((250, 905), "抵抗力 : -30", fill="#333333", font=font_footer)
-    draw.text((430, 905), "にげる : ●●", fill="#333333", font=font_footer)
+    draw.text((75, 905), f"弱点 : {weakness}", fill="#333333", font=font_footer)
+    draw.text((250, 905), f"抵抗力 : {resistance}", fill="#333333", font=font_footer)
+    draw.text((430, 905), f"にげる : {escape}", fill="#333333", font=font_footer)
 
     draw.text((75, 940), "Illus. TogoMoN Maker", fill="#777777", font=font_footer)
-    draw.text((520, 940), "001/050 RR ★", fill="#111111", font=font_footer)
+    draw.text((500, 940), f"{card_no} RR ★", fill="#111111", font=font_footer)
 
     return card.convert("RGB")
 
