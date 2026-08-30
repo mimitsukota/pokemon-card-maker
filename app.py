@@ -1,13 +1,14 @@
 import io
 import os
 import json
+import random
 import numpy as np
 import cv2
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import google.generativeai as genai
 
-# ページ設定（ブラウザのタブに表示されるアイコンとタイトル）
+# ページ設定
 st.set_page_config(page_title="TogoMoN GO カードメーカー", page_icon="🎴", layout="wide")
 
 # 作成したロゴ画像の表示
@@ -53,13 +54,12 @@ def detect_face_center(pil_img):
         if len(faces) > 0:
             largest_face = max(faces, key=lambda b: b[2] * b[3])
             x, y, w, h = largest_face
-            # 顔の目元付近（上から約35%）の位置
             eye_y = y + (h * 0.35)
             return eye_y / float(pil_img.height)
     except Exception:
         pass
         
-    return 0.4  # 検出できなかった場合は画像の上から40%の位置をデフォルトにする
+    return 0.4
 
 def analyze_image_with_gemini(pil_image, api_key_val):
     default_data = {
@@ -146,6 +146,17 @@ def crop_image(img, target_w, target_h, base_y_ratio, offset_pct):
     
     return resized_img.crop((int(crop_x1), int(crop_y1), int(crop_x2), int(crop_y2)))
 
+def draw_star(draw, cx, cy, size, fill_color):
+    """描画用：指定位置に星を描画する補助関数"""
+    points = []
+    for i in range(10):
+        r = size if i % 2 == 0 else size / 2.0
+        angle = i * np.pi / 5 - np.pi / 2
+        x = cx + r * np.cos(angle)
+        y = cy + r * np.sin(angle)
+        points.append((x, y))
+    draw.polygon(points, fill=fill_color)
+
 def generate_card(user_img, card_data, base_y_ratio, y_offset):
     card_w, card_h = 750, 1050
     card = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
@@ -167,10 +178,23 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
             break
     style = type_styles[t_key]
 
-    # 1. 外枠
-    draw.rectangle([(0, 0), (card_w, card_h)], fill="#F1C40F")
-    draw.rectangle([(18, 18), (card_w-18, card_h-18)], fill="#D4AC0D")
-    
+    # 1. 豪華な旧裏キラ風ゴールド外枠の描画
+    draw.rectangle([(0, 0), (card_w, card_h)], fill="#C59B27") # ゴールドベース
+    draw.rectangle([(8, 8), (card_w-8, card_h-8)], fill="#E5C158")
+    draw.rectangle([(16, 16), (card_w-16, card_h-16)], fill="#9A7B1C")
+
+    # 星模様（キラ加工）を外枠全体に散りばめる
+    random.seed(42) # 星の位置を固定して綺麗に配置
+    star_colors = ["#FFF8D6", "#FFE57F", "#FFFFFF", "#D4AF37"]
+    for _ in range(180):
+        sx = random.randint(0, card_w)
+        sy = random.randint(0, card_h)
+        # 内側のカードエリア（26, 26 〜）を除いた枠部分だけに星を描画
+        if sx < 26 or sx > card_w - 26 or sy < 26 or sy > card_h - 26:
+            ssize = random.randint(3, 8)
+            scolor = random.choice(star_colors)
+            draw_star(draw, sx, sy, ssize, scolor)
+
     # 2. カード本体ベース背景
     draw.rectangle([(26, 26), (card_w-26, card_h-26)], fill=style["card_bg"])
 
