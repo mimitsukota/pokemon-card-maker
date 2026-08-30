@@ -5,7 +5,7 @@ import io
 st.set_page_config(page_title="ポケモンカード風メーカー", page_icon="🎴", layout="wide")
 
 st.title("🎴 おまごちゃん ポケモンカード風メーカー")
-st.caption("アップロードしたお写真を加工せずそのままカードフレームに合成します！")
+st.caption("アップロードしたお写真をカードフレームに合成します！")
 
 st.sidebar.header("⚙️ カードの設定")
 
@@ -28,7 +28,7 @@ color_schemes = {
 }
 colors = color_schemes[card_type]
 
-uploaded_file = st.file_uploader("📷 お孫さんの写真をアップロードしてください（※加工せずそのまま入ります）", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("📷 お孫さんの写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
 def generate_card(image_file):
     user_img = Image.open(image_file).convert("RGBA")
@@ -37,57 +37,65 @@ def generate_card(image_file):
     card = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
     draw = ImageDraw.Draw(card)
 
-    # 枠線の描画
+    # 1. 枠線の描画
     draw.rectangle([(0, 0), (card_w, card_h)], fill=colors["main"])
     draw.rectangle([(25, 25), (card_w-25, card_h-25)], fill=colors["inner"], outline="#FFD700", width=8)
 
-    # ヘッダー領域
+    # 2. ヘッダー領域
     draw.rectangle([(45, 45), (card_w-45, 115)], fill=colors["header"], outline="#3D1A6A", width=4)
 
-    # 写真配置エリア (50, 135) -> (700, 565)
+    # 3. 写真配置エリア (50, 135) -> (700, 565)
     frame_x1, frame_y1, frame_x2, frame_y2 = 50, 135, card_w-50, 565
     frame_w, frame_h = frame_x2 - frame_x1, frame_y2 - frame_y1
 
-    # 写真の無加工リサイズ＆クロップ
-    img_w, img_h = user_img.size
-    aspect_user = img_w / img_h
-    aspect_frame = frame_w / frame_h
+    # 写真背景（白い台紙）
+    draw.rectangle([(frame_x1, frame_y1), (frame_x2, frame_y2)], fill="#FFFFFF")
 
-    if aspect_user > aspect_frame:
-        new_h = frame_h
-        new_w = int(new_h * aspect_user)
-    else:
-        new_w = frame_w
-        new_h = int(new_w / aspect_user)
+    # 写真のアスペクト比を維持して枠に収める（全体を表示）
+    img_w, img_h = user_img.size
+    ratio = min(frame_w / img_w, frame_h / img_h)
+    new_w = int(img_w * ratio)
+    new_h = int(img_h * ratio)
 
     resized_user_img = user_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    crop_x = (new_w - frame_w) // 2
-    crop_y = (new_h - frame_h) // 2
-    cropped_user_img = resized_user_img.crop((crop_x, crop_y, crop_x + frame_w, crop_y + frame_h))
 
-    # 完全無加工の写真をそのまま合成
-    card.paste(cropped_user_img, (frame_x1, frame_y1))
+    # 枠の中央に配置
+    paste_x = frame_x1 + (frame_w - new_w) // 2
+    paste_y = frame_y1 + (frame_h - new_h) // 2
+    card.paste(resized_user_img, (paste_x, paste_y), mask=resized_user_img)
 
     # 写真枠のゴールド装飾
     draw.rectangle([(frame_x1, frame_y1), (frame_x2, frame_y2)], outline="#FFD700", width=8)
     draw.rectangle([(frame_x1-4, frame_y1-4), (frame_x2+4, frame_y2+4)], outline="#3D1A6A", width=3)
 
-    # サブヘッダーリボン
+    # 4. サブヘッダーリボン
     draw.rectangle([(120, 545), (card_w-120, 595)], fill="#FFEAA7", outline="#3D1A6A", width=3)
 
-    # ワザ説明ボックス
+    # 5. ワザ説明ボックス
     draw.rectangle([(50, 615), (card_w-50, 860)], fill=colors["bg"], outline="#3D1A6A", width=4)
 
-    # ステータスボックス
+    # 6. ステータスボックス
     draw.rectangle([(50, 875), (card_w-50, 990)], fill=colors["header"], outline="#3D1A6A", width=3)
 
     # フォント設定
-    try:
-        font_title = ImageFont.truetype("meiryo.ttc", 36)
-        font_hp = ImageFont.truetype("meiryob.ttc", 32)
-        font_bold = ImageFont.truetype("meiryob.ttc", 28)
-        font_main = ImageFont.truetype("meiryo.ttc", 22)
-    except:
+    font_title = font_hp = font_bold = font_main = None
+    font_paths = [
+        "C:\\Windows\\Fonts\\meiryo.ttc",
+        "C:\\Windows\\Fonts\\msgothic.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+    ]
+    for path in font_paths:
+        try:
+            font_title = ImageFont.truetype(path, 36)
+            font_hp = ImageFont.truetype(path, 32)
+            font_bold = ImageFont.truetype(path, 28)
+            font_main = ImageFont.truetype(path, 22)
+            break
+        except:
+            continue
+
+    if font_title is None:
         font_title = font_hp = font_bold = font_main = ImageFont.load_default()
 
     # テキスト描画
@@ -104,7 +112,7 @@ def generate_card(image_file):
     y_offset = 700
     for line in lines:
         draw.text((80, y_offset), line, fill="#2D3436", font=font_main)
-        y_offset += 40
+        y_offset += 35
 
     # フッター
     draw.text((70, 895), "弱点 : 水", fill="#2D3436", font=font_main)
