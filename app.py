@@ -119,7 +119,7 @@ if uploaded_file is not None:
     card_img = generate_card(uploaded_file)
     with col1:
         st.subheader("🖼️ 完成カードイメージ")
-        st.image(card_img, use_column_width=True)
+        st.image(card_img, use_container_width=True)
 
     buf = io.BytesIO()
     card_img.save(buf, format="PNG")
