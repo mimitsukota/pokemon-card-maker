@@ -7,10 +7,16 @@ import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import google.generativeai as genai
 
-st.set_page_config(page_title="Togomonカードメーカー", page_icon="🎴", layout="wide")
+# ページ設定（ブラウザのタブに表示されるアイコンとタイトル）
+st.set_page_config(page_title="TogoMoN GO カードメーカー", page_icon="🎴", layout="wide")
 
-st.title("🎴 Togomonカードメーカー")
-st.caption("写真を1枚アップロードするだけで、AIが本格Togomonカードを自動作成します！")
+# 作成したロゴ画像の表示
+if os.path.exists("logo.png"):
+    st.image("logo.png", width=350)
+else:
+    st.title("🎴 TogoMoN GO")
+
+st.caption("写真を1枚アップロードするだけで、AIが本格TogoMoNカードを自動作成します！")
 
 # 日本語フォント設定
 def get_japanese_font(size):
@@ -72,7 +78,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         genai.configure(api_key=api_key_val)
         
         prompt = """
-        添付された画像を分析して、Togomonのカード風データを作成してください。
+        添付された画像を分析して、TogoMoNのカード風データを作成してください。
         以下のJSON形式のみを出力してください。
 
         {
@@ -124,7 +130,6 @@ def crop_image(img, target_w, target_h, base_y_ratio, offset_pct):
     new_h = int(u_h * scale)
     resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
     
-    # スライダー（-100〜+100）を反転・調整して感覚に合わせる
     adjusted_ratio = base_y_ratio + (offset_pct / 100.0)
     adjusted_ratio = max(0.0, min(1.0, adjusted_ratio))
     
@@ -203,7 +208,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
 
     # 5. サブ情報バー
     draw.rectangle([(50, 580), (card_w-50, 615)], fill="#FFFFFF", outline="#B7950B", width=2)
-    draw.text((65, 586), "たねTogomon  /  全国図鑑 NO.001  /  たかさ: 1.0m  おmoさ: 15.0kg", fill="#555555", font=font_footer)
+    draw.text((65, 586), "たねTogoMoN  /  全国図鑑 NO.001  /  たかさ: 1.0m  おもさ: 15.0kg", fill="#555555", font=font_footer)
 
     # 6. ワザ表示エリア
     draw.rectangle([(45, 630), (card_w-45, 890)], fill="#FFFFFF", outline=style["bg"], width=3)
@@ -228,7 +233,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     draw.text((270, 920), "抵抗力 : -30", fill="#333333", font=font_footer)
     draw.text((480, 920), "にげる : ●●", fill="#333333", font=font_footer)
 
-    draw.text((65, 955), "Illus. Togomon Maker", fill="#777777", font=font_footer)
+    draw.text((65, 955), "Illus. TogoMoN Maker", fill="#777777", font=font_footer)
     draw.text((580, 955), "001/050 RR ★", fill="#111111", font=font_footer)
 
     return card.convert("RGB")
@@ -239,15 +244,13 @@ if uploaded_file is not None:
     user_img = Image.open(uploaded_file).convert("RGB")
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
-    # 顔の位置基準を取得
     base_y_ratio = detect_face_center(user_img_fixed)
 
-    with st.spinner("🎴 Togomonカードを作成中..."):
+    with st.spinner("🎴 TogoMoNカードを作成中..."):
         card_data = analyze_image_with_gemini(user_img_fixed, api_key)
 
     with col2:
         st.subheader("⚙️ 写真の位置調整")
-        # 調整幅を-100から+100に拡大
         y_offset = st.slider("↕️ 写真の位置を上下に微調整", min_value=-100, max_value=100, value=0, help="顔・目が中央に来るようにスライダーを動かしてください")
 
     card_img = generate_card(user_img_fixed, card_data, base_y_ratio, y_offset)
