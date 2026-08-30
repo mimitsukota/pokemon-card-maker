@@ -1,6 +1,5 @@
 import io
 import os
-import urllib.request
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import google.generativeai as genai
@@ -10,20 +9,26 @@ st.set_page_config(page_title="AIポケモンカード風メーカー", page_ico
 st.title("🎴 AIおまごちゃん ポケモンカードメーカー")
 st.caption("写真を入れるとAIが自動分析して、名前やワザを自動生成します！")
 
-# 日本語フォントの自動ダウンロード関数
-@st.cache_resource
+# 確実に文字化けを防ぐフォント読み込み関数
 def get_japanese_font(size):
-    font_path = "NotoSansJP-Bold.ttf"
-    if not os.path.exists(font_path):
-        url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Bold.ttf"
-        urllib.request.urlretrieve(url, font_path)
-    try:
-        return ImageFont.truetype(font_path, size)
-    except Exception:
-        return ImageFont.load_default()
+    font_paths = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "C:\\Windows\\Fonts\\meiryo.ttc"
+    ]
+    for p in font_paths:
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except:
+                continue
+    return ImageFont.load_default()
 
-# APIキーの設定
-api_key = st.sidebar.text_input("Gemini API Key", type="password")
+# APIキー設定（Secretsにある場合は自動読み込み、なければ入力欄を表示）
+api_key = st.secrets.get("GEMINI_API_KEY", "")
+if not api_key:
+    api_key = st.sidebar.text_input("Gemini API Key", type="password")
 
 uploaded_file = st.file_uploader("📷 写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
@@ -112,7 +117,7 @@ def generate_card(user_img, card_data):
     # 2. ヘッダー
     draw.rectangle([(45, 45), (card_w-45, 115)], fill=colors["header"], outline="#3D1A6A", width=4)
 
-    # 3. 写真配置 (向きの自動修正)
+    # 3. 写真配置 (向き自動調整)
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
     frame_x1, frame_y1, frame_x2, frame_y2 = 50, 135, card_w-50, 565
