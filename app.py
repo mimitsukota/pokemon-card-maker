@@ -1,120 +1,137 @@
+import io
+import os
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
-import io
+from google import genai
+from google.genai import types
 
-st.set_page_config(page_title="ポケモンカード風メーカー", page_icon="🎴", layout="wide")
+st.set_page_config(page_title="AIポケモンカード風メーカー", page_icon="🎴", layout="wide")
 
-st.title("🎴 おまごちゃん ポケモンカード風メーカー")
-st.caption("アップロードしたお写真をカードフレームに合成します！")
+st.title("🎴 AIおまごちゃん ポケモンカードメーカー")
+st.caption("写真を入れるとAIが自動分析して、名前やワザを自動生成します！")
 
-st.sidebar.header("⚙️ カードの設定")
+# APIキーの設定
+api_key = st.sidebar.text_input("Gemini API Key", type="password")
 
-card_name = st.sidebar.text_input("なまえ", value="すまいる ボーイ")
-card_hp = st.sidebar.text_input("HP", value="HP 120")
-card_type = st.sidebar.selectbox("タイプ (枠の色)", ["パープル (超/悪)", "レッド (ほのお)", "ブルー (みず)", "グリーン (くさ)", "イエロー (でんき)"])
+uploaded_file = st.file_uploader("📷 写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
-st.sidebar.subheader("⚔️ ワザ設定")
-skill_name = st.sidebar.text_input("ワザの名前", value="ぎょろぎょろスマイル")
-skill_damage = st.sidebar.text_input("ダメージ", value="60")
-skill_desc = st.sidebar.text_area("ワザの説明", value="おちゃめな メガネで みんなの\nげんきを 100ばいに するぞ！")
+def analyze_image_with_gemini(image_bytes, api_key_val):
+    client = genai.Client(api_key=api_key_val)
+    prompt = """
+    添付された画像を分析して、オリジナルのポケモンカード風データを作成してください。
+    以下のフォーマットを厳密に守ってテキストのみを出力してください（余計な解説は不要です）。
 
-# テーマカラー設定
-color_schemes = {
-    "パープル (超/悪)": {"main": "#5C2D91", "inner": "#7B3FBF", "bg": "#F8F4FF", "header": "#EAE0F8"},
-    "レッド (ほのお)": {"main": "#C0392B", "inner": "#E74C3C", "bg": "#FDEDEC", "header": "#FADBD8"},
-    "ブルー (みず)": {"main": "#2980B9", "inner": "#3498DB", "bg": "#EBF5FB", "header": "#D4E6F1"},
-    "グリーン (くさ)": {"main": "#27AE60", "inner": "#2ECC71", "bg": "#EAFAF1", "header": "#D5F5E3"},
-    "イエロー (でんき)": {"main": "#F39C12", "inner": "#F1C40F", "bg": "#FEF9E7", "header": "#FCF3CF"}
-}
-colors = color_schemes[card_type]
-
-uploaded_file = st.file_uploader("📷 お孫さんの写真をアップロードしてください", type=["jpg", "jpeg", "png"])
-
-def generate_card(image_file):
-    user_img = Image.open(image_file).convert("RGBA")
+    カード名: (写真の特徴を表した可愛い/かっこいい名前)
+    HP: (HP 80 〜 HP 150 程度)
+    タイプ: (パープル / レッド / ブルー / グリーン / イエロー の中から1つ)
+    ワザ名: (写真の状況や表情に合わせた面白いワザ名)
+    ダメージ: (30 〜 100 程度の数字)
+    説明: (2行程度のワザの説明文。1行は20文字以内)
+    """
     
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=[
+            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            prompt
+        ]
+    )
+    
+    data = {"card_name": "すまいる ボーイ", "hp": "HP 120", "type": "パープル", "skill_name": "にっこりスマイル", "damage": "60", "desc": "みんなを えがおにする\nすてきな パワー！"}
+    lines = response.text.strip().split("\n")
+    for line in lines:
+        if "カード名:" in line:
+            data["card_name"] = line.split("カード名:")[1].strip()
+        elif "HP:" in line:
+            data["hp"] = line.split("HP:")[1].strip()
+        elif "タイプ:" in line:
+            data["type"] = line.split("タイプ:")[1].strip()
+        elif "ワザ名:" in line:
+            data["skill_name"] = line.split("ワザ名:")[1].strip()
+        elif "ダメージ:" in line:
+            data["damage"] = line.split("ダメージ:")[1].strip()
+        elif "説明:" in line:
+            data["desc"] = line.split("説明:")[1].strip()
+            
+    return data
+
+def generate_card(user_img, card_data):
     card_w, card_h = 750, 1050
     card = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
     draw = ImageDraw.Draw(card)
 
-    # 1. 枠線の描画
+    color_schemes = {
+        "レッド": {"main": "#C0392B", "inner": "#E74C3C", "bg": "#FDEDEC", "header": "#FADBD8"},
+        "ブルー": {"main": "#2980B9", "inner": "#3498DB", "bg": "#EBF5FB", "header": "#D4E6F1"},
+        "グリーン": {"main": "#27AE60", "inner": "#2ECC71", "bg": "#EAFAF1", "header": "#D5F5E3"},
+        "イエロー": {"main": "#F39C12", "inner": "#F1C40F", "bg": "#FEF9E7", "header": "#FCF3CF"},
+        "パープル": {"main": "#5C2D91", "inner": "#7B3FBF", "bg": "#F8F4FF", "header": "#EAE0F8"}
+    }
+    
+    t_key = "パープル"
+    for k in color_schemes.keys():
+        if k in card_data["type"]:
+            t_key = k
+            break
+    colors = color_schemes[t_key]
+
+    # 1. 枠線
     draw.rectangle([(0, 0), (card_w, card_h)], fill=colors["main"])
     draw.rectangle([(25, 25), (card_w-25, card_h-25)], fill=colors["inner"], outline="#FFD700", width=8)
 
-    # 2. ヘッダー領域
+    # 2. ヘッダー
     draw.rectangle([(45, 45), (card_w-45, 115)], fill=colors["header"], outline="#3D1A6A", width=4)
 
-    # 3. 写真配置エリア (50, 135) -> (700, 565)
+    # 3. 写真配置 (横写真もぴったり収める)
     frame_x1, frame_y1, frame_x2, frame_y2 = 50, 135, card_w-50, 565
     frame_w, frame_h = frame_x2 - frame_x1, frame_y2 - frame_y1
-
-    # 写真背景（白い台紙）
     draw.rectangle([(frame_x1, frame_y1), (frame_x2, frame_y2)], fill="#FFFFFF")
 
-    # 写真のアスペクト比を維持して枠に収める（全体を表示）
     img_w, img_h = user_img.size
     ratio = min(frame_w / img_w, frame_h / img_h)
-    new_w = int(img_w * ratio)
-    new_h = int(img_h * ratio)
-
+    new_w, new_h = int(img_w * ratio), int(img_h * ratio)
     resized_user_img = user_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-    # 枠の中央に配置
     paste_x = frame_x1 + (frame_w - new_w) // 2
     paste_y = frame_y1 + (frame_h - new_h) // 2
-    card.paste(resized_user_img, (paste_x, paste_y), mask=resized_user_img)
+    card.paste(resized_user_img, (paste_x, paste_y), mask=resized_user_img if resized_user_img.mode == 'RGBA' else None)
 
-    # 写真枠のゴールド装飾
     draw.rectangle([(frame_x1, frame_y1), (frame_x2, frame_y2)], outline="#FFD700", width=8)
-    draw.rectangle([(frame_x1-4, frame_y1-4), (frame_x2+4, frame_y2+4)], outline="#3D1A6A", width=3)
 
-    # 4. サブヘッダーリボン
+    # 4. ワザ・ステータス領域
     draw.rectangle([(120, 545), (card_w-120, 595)], fill="#FFEAA7", outline="#3D1A6A", width=3)
-
-    # 5. ワザ説明ボックス
     draw.rectangle([(50, 615), (card_w-50, 860)], fill=colors["bg"], outline="#3D1A6A", width=4)
-
-    # 6. ステータスボックス
     draw.rectangle([(50, 875), (card_w-50, 990)], fill=colors["header"], outline="#3D1A6A", width=3)
 
     # フォント設定
+    font_paths = ["/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "C:\\Windows\\Fonts\\meiryo.ttc"]
     font_title = font_hp = font_bold = font_main = None
-    font_paths = [
-        "C:\\Windows\\Fonts\\meiryo.ttc",
-        "C:\\Windows\\Fonts\\msgothic.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-    ]
-    for path in font_paths:
+    for p in font_paths:
         try:
-            font_title = ImageFont.truetype(path, 36)
-            font_hp = ImageFont.truetype(path, 32)
-            font_bold = ImageFont.truetype(path, 28)
-            font_main = ImageFont.truetype(path, 22)
+            font_title = ImageFont.truetype(p, 36)
+            font_hp = ImageFont.truetype(p, 32)
+            font_bold = ImageFont.truetype(p, 28)
+            font_main = ImageFont.truetype(p, 22)
             break
         except:
             continue
-
-    if font_title is None:
+    if not font_title:
         font_title = font_hp = font_bold = font_main = ImageFont.load_default()
 
-    # テキスト描画
-    draw.text((70, 58), card_name, fill="#000000", font=font_title)
-    draw.text((510, 62), card_hp, fill="#D63031", font=font_hp)
-    draw.text((270, 553), card_name, fill="#2D3436", font=font_bold)
+    # 文字の描画
+    draw.text((70, 58), card_data["card_name"], fill="#000000", font=font_title)
+    draw.text((510, 62), card_data["hp"], fill="#D63031", font=font_hp)
+    draw.text((270, 553), card_data["card_name"], fill="#2D3436", font=font_bold)
 
-    # ワザテキスト
-    draw.text((80, 635), f"【ワザ】 {skill_name}", fill="#000000", font=font_bold)
-    draw.text((610, 635), skill_damage, fill="#000000", font=font_hp)
+    draw.text((80, 635), f"【ワザ】 {card_data['skill_name']}", fill="#000000", font=font_bold)
+    draw.text((610, 635), card_data["damage"], fill="#000000", font=font_hp)
     
-    # 改行テキストの処理
-    lines = skill_desc.split("\n")
-    y_offset = 700
-    for line in lines:
-        draw.text((80, y_offset), line, fill="#2D3436", font=font_main)
-        y_offset += 35
+    lines = card_data["desc"].split("\n")
+    y_off = 700
+    for l in lines:
+        draw.text((80, y_off), l, fill="#2D3436", font=font_main)
+        y_off += 35
 
-    # フッター
     draw.text((70, 895), "弱点 : 水", fill="#2D3436", font=font_main)
     draw.text((270, 895), "抵抗力 : なし", fill="#2D3436", font=font_main)
     draw.text((500, 895), "にげる : ★", fill="#2D3436", font=font_main)
@@ -124,23 +141,30 @@ def generate_card(image_file):
 col1, col2 = st.columns([1, 1])
 
 if uploaded_file is not None:
-    card_img = generate_card(uploaded_file)
-    with col1:
-        st.subheader("🖼️ 完成カードイメージ")
-        st.image(card_img, use_container_width=True)
+    if not api_key:
+        st.warning("👈 左側のサイドバーに Gemini API キーを入力してください。")
+    else:
+        with st.spinner("🤖 AIが写真を分析してカードを作成中..."):
+            img_bytes = uploaded_file.getvalue()
+            user_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+            
+            # AI分析
+            card_data = analyze_image_with_gemini(img_bytes, api_key)
+            card_img = generate_card(user_img, card_data)
 
-    buf = io.BytesIO()
-    card_img.save(buf, format="PNG")
-    byte_im = buf.getvalue()
+            with col1:
+                st.subheader("🖼️ AI作成カード")
+                st.image(card_img, use_container_width=True)
 
-    with col2:
-        st.subheader("💾 ダウンロード")
-        st.download_button(
-            label="カード画像をダウンロード (PNG)",
-            data=byte_im,
-            file_name=f"{card_name}_card.png",
-            mime="image/png"
-        )
-else:
-    with col1:
-        st.info("👈 左側のサイドバーで設定を行い、上から写真をアップロードしてください。")
+            buf = io.BytesIO()
+            card_img.save(buf, format="PNG")
+            
+            with col2:
+                st.subheader("📋 生成されたデータ")
+                st.write(card_data)
+                st.download_button(
+                    label="カード画像をダウンロード (PNG)",
+                    data=buf.getvalue(),
+                    file_name=f"{card_data['card_name']}_card.png",
+                    mime="image/png"
+                )
