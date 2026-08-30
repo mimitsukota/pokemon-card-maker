@@ -206,7 +206,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     font_hp_val = get_japanese_font(32)
     font_skill = get_japanese_font(26)
     font_dmg = get_japanese_font(32)
-    font_desc = get_japanese_font(18) # 4行収めるためフォントサイズ調整
+    font_desc = get_japanese_font(18)
     font_footer = get_japanese_font(16)
 
     c_name = str(card_data.get("card_name", "おもしろモンスター"))
@@ -223,7 +223,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     # 4. メイン写真領域
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
-    img_x1, img_y1, img_x2, img_y2 = 60, 138, card_w-60, 550 # 高さを微調整して説明エリアを拡大
+    img_x1, img_y1, img_x2, img_y2 = 60, 138, card_w-60, 550
     img_w, img_h = img_x2 - img_x1, img_y2 - img_y1
     
     draw.rectangle([(img_x1-4, img_y1-4), (img_x2+4, img_y2+4)], fill="#B7950B")
@@ -259,7 +259,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
         lines.extend(textwrap.wrap(paragraph, width=24))
     
     y_off = 685
-    for l in lines[:4]: # きっちり4行分表示
+    for l in lines[:4]:
         draw.text((75, y_off), l, fill="#333333", font=font_desc)
         y_off += 30
 
@@ -287,7 +287,7 @@ if uploaded_file is not None:
         st.session_state["last_file_id"] = file_id
         st.session_state["base_y_ratio"] = detect_face_center(user_img_fixed)
         
-        with st.spinner("🤖 AIが新しい写真を分析してカードデータを生成中..."):
+        with st.spinner("カードデータを生成中..."):
             st.session_state["card_data"] = analyze_image_with_gemini(user_img_fixed, api_key)
 
     base_y_ratio = st.session_state.get("base_y_ratio", 0.4)
