@@ -302,11 +302,14 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
 col1, col2 = st.columns([1, 1])
 
 if uploaded_file is not None:
-    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+    # ファイル識別用のユニークキーを作成（バイトデータから判定）
+    file_bytes = uploaded_file.getvalue()
+    file_id = f"{uploaded_file.name}_{len(file_bytes)}"
     
-    user_img = Image.open(uploaded_file).convert("RGB")
+    user_img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
     user_img_fixed = ImageOps.exif_transpose(user_img)
 
+    # ファイルが変わったかどうか判定
     if "last_file_id" not in st.session_state or st.session_state["last_file_id"] != file_id:
         st.session_state["last_file_id"] = file_id
         st.session_state["base_y_ratio"] = detect_face_center(user_img_fixed)
