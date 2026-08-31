@@ -3,6 +3,7 @@ import os
 import json
 import random
 import textwrap
+import urllib.request
 import numpy as np
 import cv2
 import streamlit as st
@@ -20,24 +21,45 @@ else:
 
 st.caption("写真を1枚アップロードするだけで、AIが本格TogoMoNカードを自動作成します！")
 
-# 日本語フォント設定
-def get_japanese_font(size):
+# 日本語フォント準備（サーバー環境でも文字化けしないようフォントが無い場合は自動取得）
+@st.cache_resource
+def prepare_japanese_font_file():
     font_paths = [
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-        "C:\\Windows\\Fonts\\meiryo.ttc"
+        "C:\\Windows\\Fonts\\meiryo.ttc",
+        "NotoSansJP-Bold.ttf"
     ]
     for p in font_paths:
         if os.path.exists(p):
-            try:
-                return ImageFont.truetype(p, size)
-            except:
-                continue
+            return p
+            
+    # OS上に適切な日本語フォントが存在しない場合、Google Fontsから自動取得
+    local_font = "NotoSansJP-Bold.ttf"
+    if not os.path.exists(local_font):
+        try:
+            url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Bold.ttf"
+            urllib.request.urlretrieve(url, local_font)
+            return local_font
+        except Exception:
+            return None
+    return local_font
+
+def get_japanese_font(size):
+    font_path = prepare_japanese_font_file()
+    if font_path and os.path.exists(font_path):
+        try:
+            return ImageFont.truetype(font_path, size)
+        except Exception:
+            pass
     return ImageFont.load_default()
 
+# APIキー取得
 api_key = st.secrets.get("GEMINI_API_KEY", "")
+if not api_key:
+    st.info("💡 `st.secrets` に `GEMINI_API_KEY` が設定されていない場合、デフォルトのカードデータで生成されます。")
 
 uploaded_file = st.file_uploader("📷 写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
@@ -86,7 +108,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         
         prompt = """
         添付された画像を深く分析して、この写真の人物や対象の特徴・性格・ステータスを盛り込んだTogoMoNカード用テキストを作成してください。
-        以下のJSON形式のみを出力してください。
+        必ず以下のJSON形式のみを出力してください（Markdownの装飾や余計な解説文は含めないでください）。
 
         {
           "card_name": "写真の特徴を表した面白い名前（8文字以内）",
@@ -105,17 +127,26 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         }
         """
         
-        model_names = ['gemini-2.0-flash', 'gemini-1.5-flash', 'models/gemini-1.5-flash']
+        model_names = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
         response = None
         
         for m_name in model_names:
             try:
-                model = genai.GenerativeModel(m_name)
+                model = genai.GenerativeModel(
+                    m_name,
+                    generation_config={"response_mime_type": "application/json"}
+                )
                 response = model.generate_content([prompt, pil_image])
                 if response and response.text:
                     break
-            except:
-                continue
+            except Exception:
+                try:
+                    model = genai.GenerativeModel(m_name)
+                    response = model.generate_content([prompt, pil_image])
+                    if response and response.text:
+                        break
+                except Exception:
+                    continue
 
         if response and response.text:
             text = response.text.strip()
@@ -126,10 +157,10 @@ def analyze_image_with_gemini(pil_image, api_key_val):
                 parsed = json.loads(json_str)
                 for k in default_data.keys():
                     if k in parsed:
-                        default_data[k] = parsed[k]
+                        default_data[k] = str(parsed[k])
 
-    except Exception:
-        pass
+    except Exception as e:
+        st.warning(f"AI解析時にエラーが発生したため、標準データで作成します: {e}")
         
     return default_data
 
@@ -188,7 +219,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
             break
     style = type_styles[t_key]
 
-    # 1. ハデハデ外枠
+    # 1. 外枠グラデーション風装飾
     border_margin = 48
     
     draw.rectangle([(0, 0), (card_w, card_h)], fill="#FFD700")
@@ -246,7 +277,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     cropped_img = crop_image(user_img_fixed, img_w, img_h, base_y_ratio, y_offset)
     card.paste(cropped_img, (img_x1, img_y1))
 
-    # 5. サブ情報バー（可変対応）
+    # 5. サブ情報バー
     dex_no = card_data.get("dex_no", "001")
     height = card_data.get("height", "1.0m")
     weight = card_data.get("weight", "15.0kg")
@@ -282,7 +313,7 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
         draw.text((75, y_off), l, fill="#333333", font=font_desc)
         y_off += 30
 
-    # 7. フッター（可変対応）
+    # 7. フッター
     weakness = card_data.get("weakness", "悪 ×2")
     resistance = card_data.get("resistance", "-30")
     escape = card_data.get("escape", "●●")
@@ -302,14 +333,12 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
 col1, col2 = st.columns([1, 1])
 
 if uploaded_file is not None:
-    # ファイル識別用のユニークキーを作成（バイトデータから判定）
     file_bytes = uploaded_file.getvalue()
     file_id = f"{uploaded_file.name}_{len(file_bytes)}"
     
     user_img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
     user_img_fixed = ImageOps.exif_transpose(user_img)
 
-    # ファイルが変わったかどうか判定
     if "last_file_id" not in st.session_state or st.session_state["last_file_id"] != file_id:
         st.session_state["last_file_id"] = file_id
         st.session_state["base_y_ratio"] = detect_face_center(user_img_fixed)
@@ -340,3 +369,11 @@ if uploaded_file is not None:
             file_name=f"{card_data.get('card_name', 'togomon')}_card.png",
             mime="image/png"
         )
+```eof
+
+### 主な改善ポイント
+1. **日本語フォントの自動取得**: サーバー環境（Linux等）に日本語フォントが入っていない場合、Google Fonts（Noto Sans JP）を自動ダウンロードして利用するため、文字化け（豆腐文字 `□`）を防止します。
+2. **Gemini APIモデル＆レスポンスの強化**: 最新モデル（`gemini-2.5-flash`等）のサポートを追加し、JSON形式でのレスポンス生成オプション（`response_mime_type="application/json"`）を指定してパースエラーを防ぐようにしました。
+3. **例外処理の追加**: APIキー未設定や解析エラーが発生した際もアプリがクラッシュせず、標準データでスムーズにカードが生成されるように安全対策を行いました。
+
+こちらのコードでぜひ試してみてください！
