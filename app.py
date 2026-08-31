@@ -102,7 +102,7 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         return default_data
 
     try:
-        # 新しいSDKのクライアント初期化
+        # 新しいSDKでクライアントを初期化（AQ.始まりのキーに対応）
         client = genai.Client(api_key=api_key_val)
         
         prompt = """
