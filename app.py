@@ -21,7 +21,7 @@ else:
 
 st.caption("写真を1枚アップロードするだけで、AIが本格TogoMoNカードを自動作成します！")
 
-# 日本語フォント準備（サーバー環境でも文字化けしないようフォントが無い場合は自動取得）
+# 日本語フォント準備
 @st.cache_resource
 def prepare_japanese_font_file():
     font_paths = [
@@ -36,7 +36,6 @@ def prepare_japanese_font_file():
         if os.path.exists(p):
             return p
             
-    # OS上に適切な日本語フォントが存在しない場合、Google Fontsから自動取得
     local_font = "NotoSansJP-Bold.ttf"
     if not os.path.exists(local_font):
         try:
@@ -58,8 +57,6 @@ def get_japanese_font(size):
 
 # APIキー取得
 api_key = st.secrets.get("GEMINI_API_KEY", "")
-if not api_key:
-    st.info("💡 `st.secrets` に `GEMINI_API_KEY` が設定されていない場合、デフォルトのカードデータで生成されます。")
 
 uploaded_file = st.file_uploader("📷 写真をアップロードしてください", type=["jpg", "jpeg", "png"])
 
@@ -159,8 +156,8 @@ def analyze_image_with_gemini(pil_image, api_key_val):
                     if k in parsed:
                         default_data[k] = str(parsed[k])
 
-    except Exception as e:
-        st.warning(f"AI解析時にエラーが発生したため、標準データで作成します: {e}")
+    except Exception:
+        pass
         
     return default_data
 
@@ -219,7 +216,6 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
             break
     style = type_styles[t_key]
 
-    # 1. 外枠グラデーション風装飾
     border_margin = 48
     
     draw.rectangle([(0, 0), (card_w, card_h)], fill="#FFD700")
@@ -238,10 +234,8 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
             scolor = random.choice(star_colors)
             draw_star(draw, sx, sy, ssize, scolor)
 
-    # 2. 内側カード本体
     draw.rectangle([(border_margin, border_margin), (card_w-border_margin, card_h-border_margin)], fill=style["card_bg"])
 
-    # 3. ヘッダー帯
     header_x1, header_y1 = 58, 60
     header_x2, header_y2 = card_w - 58, 125
     draw.rectangle([(header_x1, header_y1), (header_x2, header_y2)], fill=style["bg"])
@@ -265,7 +259,6 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     draw.ellipse([(625-72, 68), (670-72, 113)], fill=style["accent"], outline="#FFFFFF", width=2)
     draw.text((634-72, 75), style["symbol"], fill="#FFFFFF", font=font_hp_label)
 
-    # 4. メイン写真領域
     user_img_fixed = ImageOps.exif_transpose(user_img)
     
     img_x1, img_y1, img_x2, img_y2 = 60, 138, card_w-60, 550
@@ -277,7 +270,6 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     cropped_img = crop_image(user_img_fixed, img_w, img_h, base_y_ratio, y_offset)
     card.paste(cropped_img, (img_x1, img_y1))
 
-    # 5. サブ情報バー
     dex_no = card_data.get("dex_no", "001")
     height = card_data.get("height", "1.0m")
     weight = card_data.get("weight", "15.0kg")
@@ -286,10 +278,8 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     draw.rectangle([(62, 560), (card_w-62, 592)], fill="#FFFFFF", outline="#B7950B", width=2)
     draw.text((72, 567), sub_info_text, fill="#555555", font=font_footer)
 
-    # 6. ワザ・説明エリア
     draw.rectangle([(60, 605), (card_w-60, 882)], fill="#FFFFFF", outline=style["bg"], width=3)
 
-    # ワザシンボル
     draw.ellipse([(75, 620), (110, 655)], fill=style["bg"])
     draw.ellipse([(118, 620), (153, 655)], fill=style["accent"])
     
@@ -299,10 +289,8 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
     draw.text((165, 622), s_name, fill="#111111", font=font_skill)
     draw.text((card_w - 120, 618), str(card_data.get("damage", "60")), fill="#111111", font=font_dmg)
 
-    # 区切り線
     draw.line([(75, 670), (card_w-75, 670)], fill="#EEEEEE", width=2)
 
-    # 4行説明文
     raw_desc = str(card_data.get("desc", "")).replace("\\n", "\n")
     lines = []
     for paragraph in raw_desc.split("\n"):
@@ -313,7 +301,6 @@ def generate_card(user_img, card_data, base_y_ratio, y_offset):
         draw.text((75, y_off), l, fill="#333333", font=font_desc)
         y_off += 30
 
-    # 7. フッター
     weakness = card_data.get("weakness", "悪 ×2")
     resistance = card_data.get("resistance", "-30")
     escape = card_data.get("escape", "●●")
@@ -369,11 +356,3 @@ if uploaded_file is not None:
             file_name=f"{card_data.get('card_name', 'togomon')}_card.png",
             mime="image/png"
         )
-```eof
-
-### 主な改善ポイント
-1. **日本語フォントの自動取得**: サーバー環境（Linux等）に日本語フォントが入っていない場合、Google Fonts（Noto Sans JP）を自動ダウンロードして利用するため、文字化け（豆腐文字 `□`）を防止します。
-2. **Gemini APIモデル＆レスポンスの強化**: 最新モデル（`gemini-2.5-flash`等）のサポートを追加し、JSON形式でのレスポンス生成オプション（`response_mime_type="application/json"`）を指定してパースエラーを防ぐようにしました。
-3. **例外処理の追加**: APIキー未設定や解析エラーが発生した際もアプリがクラッシュせず、標準データでスムーズにカードが生成されるように安全対策を行いました。
-
-こちらのコードでぜひ試してみてください！
