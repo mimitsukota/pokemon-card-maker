@@ -1,7 +1,7 @@
 import json
 import re
+from google import genai
 from PIL import Image
-import google.generativeai as genai
 import streamlit as st
 
 # ページ設定
@@ -18,14 +18,11 @@ if not api_key:
     )
     st.stop()
 
-# Gemini APIの初期化
-genai.configure(api_key=api_key)
-
 
 # 2. 画像分析＆カードデータ生成関数
 def generate_card_data(pil_image):
-    # 最新の安定モデルを指定
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    # 新SDKのClient初期化（AQ.始まりのキーに対応）
+    client = genai.Client(api_key=api_key)
 
     prompt = """
 添付された画像を分析して、この写真の人物や対象の特徴を表したTogoMoNカード用テキストを作成してください。
@@ -46,8 +43,10 @@ def generate_card_data(pil_image):
 """
 
     try:
-        # 画像とプロンプトをGeminiに送信
-        response = model.generate_content([prompt, pil_image])
+        # 新SDKでの呼び出し（gemini-2.5-flashを指定）
+        response = client.models.generate_content(
+            model="gemini-2.5-flash", contents=[prompt, pil_image]
+        )
         text = response.text.strip()
 
         # レスポンスからJSON部分だけを抽出
