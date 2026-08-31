@@ -1,222 +1,185 @@
-import json
-import os
-import re
-from google import genai
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+
 import streamlit as st
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import random
+import io
+import math
 
-# ページ設定
-st.set_page_config(
-    page_title="TogoMoN GO カードメーカー", page_icon="🎴", layout="wide"
-)
+st.set_page_config(page_title="オリジナルカードメーカー", page_icon="✨", layout="centered")
 
-# ロゴ画像の表示
-if os.path.exists("logo.png"):
-    st.image("logo.png", width=350)
-else:
-    st.title("🎴 TogoMoN GO")
-
-st.caption(
-    "写真を1枚アップロードするだけで、AIが本格TogoMoNカードを自動作成します！"
-)
-
-
-# 日本語フォント準備
-@st.cache_resource
-def prepare_japanese_font_file():
-    font_paths = [
-        "C:\\Windows\\Fonts\\msgothic.ttc",
-        "C:\\Windows\\Fonts\\meiryo.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+# ---------- 文字フォント ----------
+def get_font(size, bold=False):
+    candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc" if bold else "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
-    for p in font_paths:
-        if os.path.exists(p):
-            return p
-    return None
-
-
-FONT_PATH = prepare_japanese_font_file()
-
-
-def get_font(size):
-    if FONT_PATH:
-        try:
-            return ImageFont.truetype(FONT_PATH, size)
-        except Exception:
-            pass
+    for path in candidates:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
     return ImageFont.load_default()
 
+# ---------- キラキラ背景 ----------
+def make_holo_background(w, h):
+    img = Image.new("RGB", (w, h), (245, 170, 70))
+    px = img.load()
 
-# カード画像の描画
-def create_card_image(card_data, uploaded_image):
-    base_path = "card_base.png"
-    if os.path.exists(base_path):
-        card = Image.open(base_path).convert("RGBA")
-    else:
-        card = Image.new("RGBA", (750, 1050), (240, 240, 240, 255))
+    for y in range(h):
+        for x in range(w):
+            # 金色ベース + 虹色っぽい変化
+            wave = math.sin(x / 23) + math.sin(y / 31) + math.sin((x+y) / 47)
+            r = int(215 + 30 * (wave + 3) / 6)
+            g = int(125 + 80 * (wave + 3) / 6)
+            b = int(45 + 95 * (wave + 3) / 6)
+            px[x, y] = (min(255,r), min(255,g), min(255,b))
 
-    img = uploaded_image.convert("RGBA")
-    img_width, img_height = 580, 430
-    img_resized = ImageOps.fit(
-        img, (img_width, img_height), Image.Resampling.LANCZOS
-    )
-    card.paste(img_resized, (85, 185))
+    draw = ImageDraw.Draw(img, "RGBA")
+    random.seed(12)
+    for _ in range(220):
+        x = random.randrange(w)
+        y = random.randrange(h)
+        r = random.choice([1, 2, 3, 5])
+        draw.ellipse((x-r, y-r, x+r, y+r), fill=(255,255,255,random.randrange(35,120)))
 
-    draw = ImageDraw.Draw(card)
+    # 星
+    for _ in range(45):
+        x = random.randrange(w)
+        y = random.randrange(h)
+        s = random.choice([5, 7, 10])
+        draw.polygon([(x,y-s),(x+2,y-2),(x+s,y),(x+2,y+2),
+                      (x,y+s),(x-2,y+2),(x-s,y),(x-2,y-2)],
+                     fill=(255,245,170,180))
+    return img
 
-    font_title = get_font(42)
-    font_hp = get_font(36)
-    font_skill = get_font(32)
-    font_desc = get_font(22)
-    font_small = get_font(20)
+def fit_crop(image, size):
+    image = image.convert("RGB")
+    iw, ih = image.size
+    tw, th = size
+    scale = max(tw/iw, th/ih)
+    nw, nh = int(iw*scale), int(ih*scale)
+    image = image.resize((nw, nh), Image.Resampling.LANCZOS)
+    left = (nw-tw)//2
+    top = (nh-th)//2
+    return image.crop((left, top, left+tw, top+th))
 
-    draw.text(
-        (90, 105),
-        card_data.get("card_name", ""),
-        fill=(20, 20, 20),
-        font=font_title,
-    )
-    draw.text(
-        (540, 110),
-        f"HP {card_data.get('hp', '100')}",
-        fill=(200, 30, 30),
-        font=font_hp,
-    )
-    draw.text(
-        (140, 680),
-        card_data.get("skill_name", ""),
-        fill=(20, 20, 20),
-        font=font_skill,
-    )
-    draw.text(
-        (610, 680),
-        str(card_data.get("damage", "")),
-        fill=(20, 20, 20),
-        font=font_skill,
-    )
-    draw.text(
-        (100, 740),
-        card_data.get("description", ""),
-        fill=(50, 50, 50),
-        font=font_desc,
-    )
+def rounded_mask(size, radius):
+    mask = Image.new("L", size, 0)
+    d = ImageDraw.Draw(mask)
+    d.rounded_rectangle((0,0,size[0]-1,size[1]-1), radius=radius, fill=255)
+    return mask
 
-    draw.text(
-        (140, 895),
-        card_data.get("weakness", ""),
-        fill=(20, 20, 20),
-        font=font_small,
-    )
-    draw.text(
-        (350, 895),
-        card_data.get("resistance", ""),
-        fill=(20, 20, 20),
-        font=font_small,
-    )
-    draw.text(
-        (560, 895),
-        card_data.get("escape", ""),
-        fill=(20, 20, 20),
-        font=font_small,
-    )
-    draw.text(
-        (590, 975),
-        card_data.get("card_no", ""),
-        fill=(80, 80, 80),
-        font=font_small,
-    )
+def draw_wrapped(draw, text, xy, font, max_width, fill=(20,20,20), line_gap=6):
+    words = list(text)
+    lines = []
+    current = ""
+    for ch in words:
+        test = current + ch
+        if draw.textbbox((0,0), test, font=font)[2] <= max_width:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = ch
+    if current:
+        lines.append(current)
+    x, y = xy
+    for line in lines:
+        draw.text((x,y), line, font=font, fill=fill)
+        y += font.size + line_gap
+    return y
+
+def make_card(photo, name, hp, skill, attack, description, level):
+    W, H = 900, 1260
+    card = make_holo_background(W, H)
+    draw = ImageDraw.Draw(card, "RGBA")
+
+    # 外枠
+    draw.rounded_rectangle((10,10,W-10,H-10), radius=45, fill=(255,220,130,210), outline=(90,60,20,255), width=8)
+    draw.rounded_rectangle((28,28,W-28,H-28), radius=35, fill=(226,105,60,255), outline=(255,235,150,255), width=5)
+
+    # ヘッダー
+    draw.rectangle((55,55,W-55,170), fill=(245,190,90,255))
+    draw.text((75,72), "オリジナルカード", font=get_font(30, True), fill=(70,40,20))
+    draw.text((75,112), name, font=get_font(58, True), fill=(25,25,25))
+    draw.text((W-300,118), f"LV.{level}", font=get_font(30, True), fill=(30,30,30))
+    draw.text((W-165,108), f"HP{hp}", font=get_font(40, True), fill=(30,30,30))
+
+    # 写真
+    px, py, pw, ph = 70, 195, 760, 515
+    draw.rounded_rectangle((px-12,py-12,px+pw+12,py+ph+12), radius=28, fill=(180,125,35,255))
+    p = fit_crop(photo, (pw, ph))
+    mask = rounded_mask((pw,ph), 20)
+    card.paste(p, (px,py), mask)
+    draw = ImageDraw.Draw(card, "RGBA")
+    draw.rounded_rectangle((px,py,px+pw,py+ph), radius=20, outline=(255,235,160,255), width=8)
+
+    # 写真下の説明
+    draw.rounded_rectangle((90,735,W-90,795), radius=18, fill=(246,204,110,255), outline=(130,80,20,255), width=3)
+    draw.text((120,748), "このカードは だいじな家族の たからもの！", font=get_font(25, True), fill=(40,30,20))
+
+    # 特殊能力
+    draw.text((80,825), "【特殊能力】", font=get_font(34, True), fill=(25,105,190))
+    draw.text((285,820), skill, font=get_font(42, True), fill=(25,70,150))
+    draw.line((80,875,W-80,875), fill=(60,35,20), width=3)
+
+    # 技
+    draw.text((85,900), "✨", font=get_font(38), fill=(20,20,20))
+    draw.text((145,900), "スペシャルアタック", font=get_font(38, True), fill=(20,20,20))
+    draw.text((W-180,895), str(attack), font=get_font(48, True), fill=(20,20,20))
+    draw.line((80,965,W-80,965), fill=(60,35,20), width=3)
+
+    # 説明
+    draw.text((90,990), "このカードのせつめい", font=get_font(28, True), fill=(80,45,20))
+    draw_wrapped(draw, description, (90,1030), get_font(27), 720, fill=(30,30,30), line_gap=5)
+
+    # 下部
+    draw.line((80,1150,W-80,1150), fill=(60,35,20), width=3)
+    draw.text((85,1170), "SML 001/032", font=get_font(23, True), fill=(30,30,30))
+    draw.text((W-310,1170), "Illus. Family Card", font=get_font(23), fill=(30,30,30))
 
     return card
 
+st.title("✨ オリジナルカードメーカー")
+st.write("写真を1枚選ぶだけで、キラキラのオリジナルカードを作れます！")
 
-# AI解析とデータ生成
-def analyze_image_and_generate_data(pil_image, api_key_val):
-    default_data = {
-        "card_name": "ナゾノモブ",
-        "hp": "120",
-        "type": "超",
-        "skill_name": "ひらめき",
-        "damage": "80",
-        "description": "画像解析がスキップされた時に現れるカード。",
-        "weakness": "悪 ×2",
-        "resistance": "-30",
-        "escape": "●●",
-        "card_no": "001/050",
-    }
+photo_file = st.file_uploader("📷 写真をアップロード", type=["jpg", "jpeg", "png", "webp"])
 
-    if not api_key_val:
-        st.error(
-            "⚠️ GEMINI_API_KEY が設定されていません。StreamlitのSecretsを確認してください。"
-        )
-        return default_data
+col1, col2 = st.columns(2)
+with col1:
+    name = st.text_input("カードの名前", "えがおちゃん")
+    hp = st.number_input("HP", min_value=10, max_value=999, value=120, step=10)
+    level = st.number_input("LV.", min_value=1, max_value=999, value=76)
 
-    try:
-        # 新SDKでClient初期化
-        client = genai.Client(api_key=api_key_val)
+with col2:
+    skill = st.text_input("特殊能力", "えがおパワー")
+    attack = st.number_input("攻撃力", min_value=10, max_value=999, value=100, step=10)
 
-        prompt = """
-添付された画像を分析して、この写真の人物や対象の特徴を表したTogoMoNカード用テキストを作成してください。
-必ず以下のJSONフォーマットのみで出力してください。
+description = st.text_area(
+    "カードのせつめい",
+    "いつもえがおで、みんなをしあわせにする。とってもたいせつな家族のたからもの！"
+)
 
-{
-    "card_name": "写真の特徴を表した面白い名前（8文字以内）",
-    "hp": "120",
-    "type": "超",
-    "skill_name": "写真のポーズに関連したワザ名（8文字以内）",
-    "damage": "80",
-    "description": "ワザの効果や解説（30文字以内）",
-    "weakness": "悪 ×2",
-    "resistance": "-30",
-    "escape": "●●",
-    "card_no": "001/050"
-}
-"""
-        response = client.models.generate_content(
-            model="gemini-2.5-flash", contents=[prompt, pil_image]
-        )
+if st.button("✨ カードを作る！", use_container_width=True):
+    if not photo_file:
+        st.warning("まず写真を1枚アップロードしてください。")
+    else:
+        photo = Image.open(photo_file)
+        card = make_card(photo, name, hp, skill, attack, description, level)
 
-        res_text = response.text.strip()
-        json_match = re.search(r"\{.*\}", res_text, re.DOTALL)
-        if json_match:
-            res_text = json_match.group(0)
+        st.session_state["card"] = card
 
-        data = json.loads(res_text)
-        return data
+if "card" in st.session_state:
+    st.subheader("🎉 完成！")
+    card = st.session_state["card"]
+    st.image(card, use_container_width=True)
 
-    except Exception as e:
-        st.error(f"Gemini API呼び出しエラー: {e}")
-        return default_data
+    buf = io.BytesIO()
+    card.save(buf, format="PNG")
+    st.download_button(
+        "📥 カード画像を保存する",
+        data=buf.getvalue(),
+        file_name="original_card.png",
+        mime="image/png",
+        use_container_width=True
+    )
 
-
-# メイン画面処理
-api_key = st.secrets.get("GEMINI_API_KEY", "")
-
-uploaded_file = st.file_uploader("写真をえらんでね", type=["jpg", "jpeg", "png"])
-
-if uploaded_file is not None:
-    user_image = Image.open(uploaded_file)
-    st.image(user_image, caption="アップロード画像", width=300)
-
-    if st.button("🎴 TogoMoNカードを作成する！", type="primary"):
-        with st.spinner("AIが画像を分析してカードを作成中..."):
-            card_data = analyze_image_and_generate_data(user_image, api_key)
-            final_card = create_card_image(card_data, user_image)
-
-            st.success("完成しました！")
-            st.image(
-                final_card, caption="完成したカード", use_container_width=True
-            )
-
-            import io
-
-            buf = io.BytesIO()
-            final_card.save(buf, format="PNG")
-            byte_im = buf.getvalue()
-
-            st.download_button(
-                label="📥 カード画像を保存する",
-                data=byte_im,
-                file_name="togomon_card.png",
-                mime="image/png",
-            )
+st.caption("※オリジナルデザインのカードメーカーです。既存のカード商品そのものを再現するものではありません。")
