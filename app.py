@@ -8,7 +8,7 @@ import numpy as np
 import cv2
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-import google.generativeai as genai
+from google import genai
 
 # ページ設定
 st.set_page_config(page_title="TogoMoN GO カードメーカー", page_icon="🎴", layout="wide")
@@ -102,7 +102,8 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         return default_data
 
     try:
-        genai.configure(api_key=api_key_val)
+        # 新しいSDKのクライアント初期化
+        client = genai.Client(api_key=api_key_val)
         
         prompt = """
         添付された画像を分析して、この写真の人物や対象の特徴を表したTogoMoNカード用テキストを作成してください。
@@ -125,9 +126,10 @@ def analyze_image_with_gemini(pil_image, api_key_val):
         }
         """
         
-        # 利用するモデル（gemini-1.5-flashを最優先に指定）
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content([prompt, pil_image])
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[prompt, pil_image]
+        )
 
         if response and response.text:
             text = response.text.strip()
@@ -141,7 +143,6 @@ def analyze_image_with_gemini(pil_image, api_key_val):
                         default_data[k] = str(parsed[k])
 
     except Exception as e:
-        # エラーが起きた場合は画面に表示させる
         st.error(f"⚠️ Gemini API呼び出しエラー: {e}")
         
     return default_data
