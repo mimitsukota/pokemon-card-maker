@@ -98,52 +98,36 @@ def analyze_image_with_gemini(pil_image, api_key_val):
     }
 
     if not api_key_val:
+        st.error("⚠️ GEMINI_API_KEY が設定されていません。StreamlitのSecretsを確認してください。")
         return default_data
 
     try:
         genai.configure(api_key=api_key_val)
         
         prompt = """
-        添付された画像を深く分析して、この写真の人物や対象の特徴・性格・ステータスを盛り込んだTogoMoNカード用テキストを作成してください。
-        必ず以下のJSON形式のみを出力してください（Markdownの装飾や余計な解説文は含めないでください）。
+        添付された画像を分析して、この写真の人物や対象の特徴を表したTogoMoNカード用テキストを作成してください。
+        必ず以下のJSONフォーマットのみで出力してください。
 
         {
           "card_name": "写真の特徴を表した面白い名前（8文字以内）",
-          "hp": "100〜200の数値",
-          "type": "草/炎/水/雷/超/闘 のどれかひとつ",
-          "skill_name": "写真のポーズや雰囲気に関連したワザ名（8文字以内）",
-          "damage": "30〜120の数値",
-          "desc": "写真の特徴や得意技の凄さを表す解説文（改行コード\\nを使ってちょうど4行。1行あたり18〜22文字程度。）",
-          "dex_no": "001〜150の3桁数値（例: 025）",
-          "height": "写真の印象に合わせた高さ（例: 0.5m や 1.6m）",
-          "weight": "写真の印象に合わせた重さ（例: 4.2kg や 55.0kg）",
-          "weakness": "属性に合わせた弱点（例: 炎 ×2 や 水 ×2 や 悪 ×2）",
-          "resistance": "抵抗力（例: -20 や -30 や なし）",
-          "escape": "にげるエネルギー（例: ● や ●● や ●●●）",
-          "card_no": "図鑑番号に合わせたカード番号（例: 025/050）"
+          "hp": "120",
+          "type": "超",
+          "skill_name": "写真のポーズに関連したワザ名（8文字以内）",
+          "damage": "80",
+          "desc": "写真のポーズや表情のすごさを表す解説文（改行コード\\nを使ってちょうど4行。）",
+          "dex_no": "025",
+          "height": "1.2m",
+          "weight": "25.0kg",
+          "weakness": "悪 ×2",
+          "resistance": "-20",
+          "escape": "●●",
+          "card_no": "025/050"
         }
         """
         
-        model_names = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
-        response = None
-        
-        for m_name in model_names:
-            try:
-                model = genai.GenerativeModel(
-                    m_name,
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                response = model.generate_content([prompt, pil_image])
-                if response and response.text:
-                    break
-            except Exception:
-                try:
-                    model = genai.GenerativeModel(m_name)
-                    response = model.generate_content([prompt, pil_image])
-                    if response and response.text:
-                        break
-                except Exception:
-                    continue
+        # 利用するモデル（gemini-1.5-flashを最優先に指定）
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content([prompt, pil_image])
 
         if response and response.text:
             text = response.text.strip()
@@ -156,8 +140,9 @@ def analyze_image_with_gemini(pil_image, api_key_val):
                     if k in parsed:
                         default_data[k] = str(parsed[k])
 
-    except Exception:
-        pass
+    except Exception as e:
+        # エラーが起きた場合は画面に表示させる
+        st.error(f"⚠️ Gemini API呼び出しエラー: {e}")
         
     return default_data
 
